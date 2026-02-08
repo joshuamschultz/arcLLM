@@ -25,3 +25,6 @@ build/
 
 # pytest
 .pytest_cache/
+
+# Claude 
+.claude/
