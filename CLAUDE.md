@@ -182,24 +182,24 @@ ArcLLMError (base)
 
 ## Build Order (16 Steps, 4 Phases)
 
-### Phase 1: Core Foundation (Steps 1-6) — CURRENT
+### Phase 1: Core Foundation (Steps 1-6) — COMPLETE
 
 | Step | What | Status |
 |------|------|--------|
-| 1 | Project setup + pydantic types | Planned (plan exists) |
-| 2 | Config loading (global + provider TOMLs) | Not started |
-| 3 | Anthropic adapter + tool support | Not started |
-| 4 | Test harness — agentic loop | Not started |
-| 5 | OpenAI adapter | Not started |
-| 6 | Provider registry + load_model() | Not started |
+| 1 | Project setup + pydantic types | Complete |
+| 2 | Config loading (global + provider TOMLs) | Complete |
+| 3 | Anthropic adapter + tool support | Complete |
+| 4 | Test harness — agentic loop | Complete |
+| 5 | OpenAI adapter | Complete |
+| 6 | Provider registry + load_model() | Complete |
 
-### Phase 2: Module System (Steps 7-9)
+### Phase 2: Module System (Steps 7-9) — CURRENT
 
-| Step | What |
-|------|------|
-| 7 | Fallback + retry |
-| 8 | Rate limiter |
-| 9 | Router |
+| Step | What | Status |
+|------|------|--------|
+| 7 | Fallback + retry | Complete |
+| 8 | Rate limiter | Not started |
+| 9 | Router | Not started |
 
 ### Phase 3: Observability (Steps 10-13)
 

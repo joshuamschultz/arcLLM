@@ -1,7 +1,7 @@
 {
-  "current_step": 7,
+  "current_step": 8,
   "current_task": null,
-  "completed_steps": [1, 2, 3, 4, 5, 6],
+  "completed_steps": [1, 2, 3, 4, 5, 6, 7],
   "step_plans": {
     "1": {
       "file": "arcllm-step-01-plan.md",
@@ -114,6 +114,30 @@
         "T6.4 Update __init__.py",
         "T6.5 Full test suite verification"
       ]
+    },
+    "7": {
+      "status": "complete",
+      "spec_id": "007",
+      "tasks": [
+        "T7.1 Update ArcLLMAPIError with status_code",
+        "T7.2 Create BaseModule in modules/base.py",
+        "T7.3 Write test_retry.py (TDD RED)",
+        "T7.4 Implement RetryModule in modules/retry.py",
+        "T7.5 Write test_fallback.py (TDD RED)",
+        "T7.6 Implement FallbackModule in modules/fallback.py",
+        "T7.7 Update registry.py for module stacking",
+        "T7.8 Full test suite verification"
+      ],
+      "completed_tasks": [
+        "T7.1 Update ArcLLMAPIError with status_code",
+        "T7.2 Create BaseModule in modules/base.py",
+        "T7.3 Write test_retry.py (TDD RED)",
+        "T7.4 Implement RetryModule in modules/retry.py",
+        "T7.5 Write test_fallback.py (TDD RED)",
+        "T7.6 Implement FallbackModule in modules/fallback.py",
+        "T7.7 Update registry.py for module stacking",
+        "T7.8 Full test suite verification"
+      ]
     }
   },
   "decisions": {
@@ -200,6 +224,54 @@
       "reason": "import arcllm should not trigger httpx loading; adapters loaded on-demand by load_model() or explicit attribute access",
       "date": "2026-02-08",
       "alternatives_considered": ["remove adapters from __init__.py entirely", "keep eager imports"]
+    },
+    "D-047_wrapper_module_pattern": {
+      "decision": "Wrapper classes (middleware pattern) — each module is an LLMProvider wrapping an inner provider",
+      "reason": "Composable, testable independently, transparent to agents. Scales to N modules without adapter changes.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["if-checks in invoke()", "decorator pattern", "event hooks", "subclass mixin"]
+    },
+    "D-048_separate_retry_fallback": {
+      "decision": "Two separate modules: RetryModule and FallbackModule (not combined)",
+      "reason": "Single responsibility, independently configurable, can use one without the other",
+      "date": "2026-02-08",
+      "alternatives_considered": ["combined ResilienceModule with both behaviors"]
+    },
+    "D-049_retry_triggers": {
+      "decision": "Retry on HTTP 429/500/502/503/529 + httpx.ConnectError + httpx.TimeoutException",
+      "reason": "Industry standard retryable codes; 529 is Anthropic-specific overload",
+      "date": "2026-02-08",
+      "alternatives_considered": ["retry all 5xx", "configurable-only with no defaults"]
+    },
+    "D-050_exponential_backoff_jitter": {
+      "decision": "Exponential backoff with jitter: min(base * 2^attempt + uniform(0, base), max_wait)",
+      "reason": "Prevents thundering herd; jitter decorrelates concurrent retriers",
+      "date": "2026-02-08",
+      "alternatives_considered": ["fixed delay", "exponential without jitter", "full jitter"]
+    },
+    "D-051_config_driven_fallback_chain": {
+      "decision": "Config-driven fallback chain with on-demand load_model() for each fallback provider",
+      "reason": "Only creates fallback adapters when needed; chain order from config.toml",
+      "date": "2026-02-08",
+      "alternatives_considered": ["pre-loaded fallback adapters at construction time"]
+    },
+    "D-052_proportional_jitter": {
+      "decision": "Jitter proportional to backoff: uniform(0, backoff) not uniform(0, base)",
+      "reason": "Review fix — fixed jitter scales with exponential backoff to better prevent thundering herd at higher retry attempts",
+      "date": "2026-02-08",
+      "alternatives_considered": ["fixed jitter uniform(0, base)", "full jitter: uniform(0, backoff) replacing backoff entirely"]
+    },
+    "D-053_module_config_validation": {
+      "decision": "Bounds validation in RetryModule and FallbackModule constructors",
+      "reason": "Review fix — 3 agents flagged missing input validation. Invalid configs should fail at construction, not during operation.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["pydantic config models", "no validation (rely on runtime errors)"]
+    },
+    "D-054_module_settings_cache": {
+      "decision": "Pre-extract module settings dict from pydantic model_dump() into _module_settings_cache",
+      "reason": "Review fix — avoids repeated model_dump() calls (2x per load_model() call). Cache populated on first global config load.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["call model_dump() each time", "store raw pydantic objects"]
     }
   },
   "notes": [
@@ -224,7 +296,22 @@
     "  Fix 2: Tightened provider name regex — hyphens disallowed (invalid Python module names), underscores allowed",
     "  Fix 3: Lazy adapter imports via __getattr__ — httpx no longer loaded at import arcllm time",
     "Post-fix: 139 tests passing (138 + 1 new hyphen-rejection test), 1 skipped",
-    "Next: Phase 2 (Module System) — Step 7: Fallback + retry"
+    "Next: Phase 2 (Module System) — Step 7: Fallback + retry",
+    "Step 7 complete — 8/8 tasks, 45 new tests, 194 total tests passing, 98% coverage",
+    "BaseModule: transparent wrapper foundation, delegates all LLMProvider methods to inner",
+    "RetryModule: exponential backoff + jitter, retries 429/500/502/503/529 + connection/timeout errors",
+    "FallbackModule: config-driven provider chain, on-demand load_model(), raises primary error on exhaustion",
+    "Registry integration: load_model() accepts retry= and fallback= kwargs with 4-level config resolution",
+    "Stacking order: Retry(Fallback(adapter)) — retry wraps fallback for full chain coverage",
+    "Circular import: fallback.py uses lazy import wrapper for registry.load_model()",
+    "Global config cached at module level in registry.py with clear_cache() support",
+    "Module classes lazy-loaded via __getattr__ in __init__.py",
+    "Next: Step 8 — Rate limiter module",
+    "Step 7 review (/review 007) — 6-agent swarm, CONDITIONAL PASS, 3 fixes applied:",
+    "  Fix 1 (D-053): Config validation — RetryModule rejects negative max_retries, non-positive backoff/max_wait; FallbackModule rejects chain >10",
+    "  Fix 2 (D-052): Proportional jitter — uniform(0, backoff) not uniform(0, base), scales with retry attempt",
+    "  Fix 3 (D-054): Module settings cache — pre-extract model_dump() into _module_settings_cache, avoids 2x serialization per load_model()",
+    "Post-review: 201 tests passing (194 + 7 new validation tests), 1 skipped"
   ],
   "meta": {
     "last_updated": "2026-02-08",

@@ -204,3 +204,114 @@ class TestErrorHandling:
         with patch("importlib.import_module", side_effect=ImportError("bad dependency")):
             with pytest.raises(ArcLLMConfigError, match="adapter module"):
                 _get_adapter_class("brokenprovider")
+
+
+# ---------------------------------------------------------------------------
+# TestModuleStacking
+# ---------------------------------------------------------------------------
+
+
+class TestModuleStacking:
+    """Registry integration: load_model() wraps adapters with modules."""
+
+    def test_load_model_with_retry_kwarg(self):
+        """retry=True wraps adapter with RetryModule."""
+        from arcllm.modules.retry import RetryModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", retry=True)
+        assert isinstance(model, RetryModule)
+
+    def test_load_model_with_retry_dict(self):
+        """retry={...} wraps adapter with RetryModule using custom config."""
+        from arcllm.modules.retry import RetryModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", retry={"max_retries": 5})
+        assert isinstance(model, RetryModule)
+        assert model._max_retries == 5
+
+    def test_load_model_with_config_retry(self):
+        """Config.toml retry.enabled=true wraps adapter with RetryModule."""
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.retry import RetryModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"retry": ModuleConfig(enabled=True, max_retries=2)},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            model = load_model("anthropic")
+        assert isinstance(model, RetryModule)
+
+    def test_load_model_retry_false_overrides_config(self):
+        """retry=False disables retry even if config.toml enables it."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.retry import RetryModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"retry": ModuleConfig(enabled=True, max_retries=2)},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            model = load_model("anthropic", retry=False)
+        assert not isinstance(model, RetryModule)
+        assert isinstance(model, AnthropicAdapter)
+
+    def test_load_model_with_fallback(self):
+        """fallback=True wraps adapter with FallbackModule."""
+        from arcllm.modules.fallback import FallbackModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", fallback=True)
+        assert isinstance(model, FallbackModule)
+
+    def test_load_model_with_fallback_dict(self):
+        """fallback={...} wraps adapter with FallbackModule using custom config."""
+        from arcllm.modules.fallback import FallbackModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", fallback={"chain": ["openai"]})
+        assert isinstance(model, FallbackModule)
+        assert model._chain == ["openai"]
+
+    def test_load_model_retry_and_fallback_stacking_order(self):
+        """Stacking order: Retry(Fallback(adapter))."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.modules.fallback import FallbackModule
+        from arcllm.modules.retry import RetryModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", retry=True, fallback=True)
+        # Outermost is Retry
+        assert isinstance(model, RetryModule)
+        # Inner is Fallback
+        assert isinstance(model._inner, FallbackModule)
+        # Innermost is the adapter
+        assert isinstance(model._inner._inner, AnthropicAdapter)
+
+    def test_load_model_no_modules_unchanged(self):
+        """Without module kwargs, adapter returned directly (existing behavior)."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic")
+        assert isinstance(model, AnthropicAdapter)
+
+    def test_load_model_retry_kwarg_overrides_config_values(self):
+        """retry={max_retries: 10} overrides config.toml max_retries=2."""
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.retry import RetryModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"retry": ModuleConfig(enabled=True, max_retries=2)},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            model = load_model("anthropic", retry={"max_retries": 10})
+        assert isinstance(model, RetryModule)
+        assert model._max_retries == 10

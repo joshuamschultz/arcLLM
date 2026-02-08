@@ -537,3 +537,174 @@ Key findings from research:
 **Rationale**: Proven in Step 3. Each method independently testable. When OpenAI changes their API, update one method. Consistent structure across adapters makes the codebase easier to maintain and learn. A developer who understands the Anthropic adapter instantly understands the OpenAI adapter.
 
 ---
+
+## D-041: Convention-Based Registry
+
+**Decision**: Provider name drives TOML path, module path, and class name by convention.
+
+**Alternatives considered**:
+- Static mapping dict — explicit but another file to maintain
+- TOML `adapter_module` field + importlib — flexible but config-coupled
+- `entry_points` plugin system — standard Python but overkill
+
+**Rationale**: File structure is the registry. Zero config for discovery. No mapping dict to maintain. Adding a provider = drop a `.py` file and a `.toml` file. Convention: `provider_name` → `arcllm.adapters.{name}` → `{Name.title()}Adapter`.
+
+---
+
+## D-042: Class Name Convention
+
+**Decision**: `provider_name.title() + 'Adapter'` — renamed `OpenAIAdapter` to `OpenaiAdapter`.
+
+**Alternatives considered**:
+- Exception dict for known cases (e.g., `openai → OpenAIAdapter`)
+- Scan module for BaseAdapter subclass
+
+**Rationale**: Predictable, no exception maps. Pure convention means zero maintenance. `openai.title()` → `Openai` → `OpenaiAdapter`. Works for any provider name without special cases.
+
+---
+
+## D-043: Module-Level Config Cache
+
+**Decision**: Cache `ProviderConfig` in module-level dict with `clear_cache()` for testing.
+
+**Alternatives considered**:
+- Load every time — wasteful at scale
+- Explicit Registry object — more ceremony, same effect
+
+**Rationale**: Avoids re-parsing TOML per `load_model()` call. Essential at scale with thousands of agents. `clear_cache()` ensures test isolation. CPython GIL provides thread safety for dict operations.
+
+---
+
+## D-044: No **kwargs on load_model()
+
+**Decision**: Remove `**kwargs` from `load_model()` — only `provider` and `model` params.
+
+**Alternatives considered**:
+- Keep `**kwargs` and add to `BaseAdapter` — but adapters don't need arbitrary args
+- Catch `TypeError` and wrap in `ArcLLMConfigError` — defensive but masks the real issue
+
+**Rationale**: `BaseAdapter.__init__` doesn't accept `**kwargs`. Forwarding them causes confusing `TypeError` at adapter construction time instead of a clear API error. Explicit params only.
+
+---
+
+## D-045: No Hyphens in Provider Names
+
+**Decision**: Provider name regex allows underscores but not hyphens: `^[a-z][a-z0-9_]*$`.
+
+**Alternatives considered**:
+- Keep hyphens and auto-convert to underscores at import time
+
+**Rationale**: Provider name maps to Python module name via convention. Hyphens are invalid in Python identifiers. Allowing them would pass validation but fail at import.
+
+---
+
+## D-046: Lazy Adapter Imports
+
+**Decision**: Adapter classes lazy-loaded via `__getattr__` in `__init__.py`, not eagerly imported.
+
+**Alternatives considered**:
+- Remove adapters from `__init__.py` entirely
+- Keep eager imports
+
+**Rationale**: `import arcllm` should not trigger httpx loading. Adapters loaded on-demand by `load_model()` or explicit attribute access.
+
+---
+
+## D-047: Wrapper Module Pattern
+
+**Decision**: Wrapper classes (middleware pattern) — each module is an `LLMProvider` wrapping an inner provider.
+
+**Alternatives considered**:
+- If-checks in `invoke()` — simple but tightly coupled
+- Decorator pattern — similar but less discoverable
+- Event hooks — powerful but complex
+- Subclass mixin — fragile with multiple modules
+
+**Rationale**: Composable, testable independently, transparent to agents. `Retry(Fallback(adapter))` — each module intercepts `invoke()`, does its thing, delegates to inner. Scales to N modules without adapter changes.
+
+---
+
+## D-048: Separate Retry and Fallback Modules
+
+**Decision**: Two separate modules: `RetryModule` and `FallbackModule` (not combined).
+
+**Alternatives considered**:
+- Combined `ResilienceModule` with both behaviors
+
+**Rationale**: Single responsibility. Independently configurable. Can use one without the other. Agent that only needs retry doesn't pay for fallback code.
+
+---
+
+## D-049: Retry Triggers
+
+**Decision**: Retry on HTTP 429/500/502/503/529 + `httpx.ConnectError` + `httpx.TimeoutException`.
+
+**Alternatives considered**:
+- Retry all 5xx
+- Configurable-only with no defaults
+
+**Rationale**: Industry standard retryable codes. 529 is Anthropic-specific overload. Connection and timeout errors are always transient. Non-retryable codes (400, 401, 403) fail immediately.
+
+---
+
+## D-050: Exponential Backoff with Jitter
+
+**Decision**: `min(base * 2^attempt + uniform(0, backoff), max_wait)` — exponential backoff with proportional jitter.
+
+**Alternatives considered**:
+- Fixed delay — no backoff, poor for sustained failures
+- Exponential without jitter — thundering herd problem
+- Full jitter: `uniform(0, backoff)` replacing backoff entirely — too random
+
+**Rationale**: Exponential backoff increases wait time between retries. Jitter proportional to backoff (not fixed to base) decorrelates concurrent retriers more effectively at higher retry counts.
+
+**Note**: Originally implemented with `uniform(0, base)` (fixed jitter). Changed to `uniform(0, backoff)` (proportional) during review — see D-052.
+
+---
+
+## D-051: Config-Driven Fallback Chain
+
+**Decision**: Config-driven fallback chain with on-demand `load_model()` for each fallback provider.
+
+**Alternatives considered**:
+- Pre-loaded fallback adapters at construction time
+
+**Rationale**: Only creates fallback adapters when needed. Chain order from config.toml. On primary failure, walks the chain calling `load_model(provider_name)` for each. If all fail, raises the original (primary) error.
+
+---
+
+## D-052: Proportional Jitter (Review Fix)
+
+**Decision**: Changed jitter from `uniform(0, self._backoff_base)` to `uniform(0, backoff)` — jitter scales with backoff.
+
+**Alternatives considered**:
+- Keep fixed jitter `uniform(0, base)` — simpler but less effective at higher retry counts
+- Full jitter: `uniform(0, backoff)` replacing backoff entirely — too random, loses exponential growth
+
+**Rationale**: Flagged during 6-agent review (architect-reviewer). At attempt 3 with base=1.0, backoff=8.0 but jitter was only 0-1.0 — ineffective decorrelation. Proportional jitter (0 to 8.0) properly spreads retriers at all attempt levels.
+
+---
+
+## D-053: Module Config Validation (Review Fix)
+
+**Decision**: Bounds validation in `RetryModule` and `FallbackModule` constructors.
+
+**Alternatives considered**:
+- Pydantic config models — more structured but adds complexity for 3-4 fields
+- No validation — rely on runtime errors (division by zero, negative sleep)
+
+**Rationale**: Flagged by 3 review agents (security, QA, architecture). Invalid configs should fail at construction, not during operation. `max_retries >= 0`, `backoff_base > 0`, `max_wait > 0`, `chain length <= 10`. Consistent with fail-fast philosophy (D-032).
+
+---
+
+## D-054: Module Settings Cache (Review Fix)
+
+**Decision**: Pre-extract module settings from `model_dump()` into `_module_settings_cache` dict.
+
+**Alternatives considered**:
+- Call `model_dump()` each time — wasteful, 2x per `load_model()` call
+- Store raw pydantic objects and access attributes — more coupling to pydantic internals
+
+**Rationale**: Flagged by performance-engineer review. `_resolve_module_config()` is called twice per `load_model()` (once for retry, once for fallback). Pre-extracting settings on first global config load avoids repeated pydantic serialization. Cache cleared alongside other caches via `clear_cache()`.
+
+---
