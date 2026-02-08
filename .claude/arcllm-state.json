@@ -1,7 +1,7 @@
 {
-  "current_step": 4,
+  "current_step": 5,
   "current_task": null,
-  "completed_steps": [1, 2, 3],
+  "completed_steps": [1, 2, 3, 4],
   "step_plans": {
     "1": {
       "file": "arcllm-step-01-plan.md",
@@ -61,6 +61,23 @@
         "T3.4 Write comprehensive test_anthropic.py",
         "T3.5 Update __init__.py with new exports"
       ]
+    },
+    "4": {
+      "status": "complete",
+      "tasks": [
+        "T4.1 Create Jupyter notebook for agentic loop validation",
+        "T4.2 Test simple text response",
+        "T4.3 Test calculator tool loop (2-turn)",
+        "T4.4 Test search tool loop (canned results)",
+        "T4.5 Test multi-tool with agentic loop helper"
+      ],
+      "completed_tasks": [
+        "T4.1 Create Jupyter notebook for agentic loop validation",
+        "T4.2 Test simple text response",
+        "T4.3 Test calculator tool loop (2-turn)",
+        "T4.4 Test search tool loop (canned results)",
+        "T4.5 Test multi-tool with agentic loop helper"
+      ]
     }
   },
   "decisions": {
@@ -104,7 +121,14 @@
     "AnthropicAdapter: full request/response translation, all 4 content block types, tool call parsing",
     "Mocking: AsyncMock + httpx.Response (not MockTransport) — cleaner for unit testing",
     "Decision log at .claude/decision-log.md (D-001 through D-035)",
-    "Next step: Step 4 — Test harness — agentic loop"
+    "Next step: Step 4 — Test harness — agentic loop",
+    "Step 4 complete — Jupyter notebook + script for live API testing",
+    "4 tests: simple text, calculator loop, search loop, multi-tool loop",
+    "All 4 passed against claude-haiku-4-5-20251001, 3094 tokens total",
+    "Decision: notebook approach (not pytest mocks) since goal is validating unified interface with real API",
+    "Decision: both calculator and web_search tools for testing",
+    "Files: walkthrough/step_04_agentic_loop.ipynb + walkthrough/run_step_04.py",
+    "Next step: Step 5 — OpenAI adapter"
   ],
   "meta": {
     "last_updated": "2026-02-07",

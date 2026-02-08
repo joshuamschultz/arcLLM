@@ -467,3 +467,31 @@ Key findings from research:
 **Why not allowlist**: Provider configs are file-driven — new providers are added by dropping a TOML file, not by modifying code. An allowlist would break this extensibility.
 
 ---
+
+## D-036: Step 4 Test Approach — Jupyter Notebook (Not Pytest Mocks)
+
+**Decision**: Validate the agentic loop with a Jupyter notebook making real API calls, rather than additional pytest mocks
+
+**Alternatives considered**:
+- Pytest with mocked httpx responses — more deterministic, runs offline
+- Pytest with VCR/cassettes — records real responses, replays offline
+- Standalone Python script — no notebook tooling needed
+
+**Rationale**: Step 4's purpose is to validate the *unified interface* works end-to-end against the real API, not to add more unit tests (Step 3 already has 84 unit tests with 99% coverage). A notebook provides interactive, visual validation of the full agentic tool-calling loop. Josh clarified: "we are not actually building the loop here, we are simply going to test the unified interface with a loop."
+
+**Influence**: Also created `walkthrough/run_step_04.py` as a script equivalent for CI/headless execution.
+
+---
+
+## D-037: Step 4 Tool Selection — Both Calculator and Web Search
+
+**Decision**: Include both calculator (real eval) and web search (canned results) tools in the notebook
+
+**Alternatives considered**:
+- Calculator only — simplest
+- Search only — tests string content handling
+- Both — tests multi-tool selection
+
+**Rationale**: Both tools exercise different content patterns (numeric vs string results) and together test the multi-tool selection capability. The multi-tool test validates the LLM correctly picks which tool to use when multiple are available.
+
+---
