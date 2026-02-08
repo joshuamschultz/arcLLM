@@ -708,3 +708,114 @@ Key findings from research:
 **Rationale**: Flagged by performance-engineer review. `_resolve_module_config()` is called twice per `load_model()` (once for retry, once for fallback). Pre-extracting settings on first global config load avoids repeated pydantic serialization. Cache cleared alongside other caches via `clear_cache()`.
 
 ---
+
+## D-055: Token Bucket Algorithm
+
+**Decision**: Token bucket algorithm for rate limiting — capacity = burst size, refill rate = RPM/60 tokens/sec.
+
+**Alternatives considered**:
+- Sliding window counter — smoother but more complex, no burst allowance
+- Leaky bucket — fixed rate, no bursts, highest latency
+- Adaptive — reactive (gets 429s before adjusting), complex, hard to reason about
+
+**Rationale**: Allows bursts (good for agents waking simultaneously), enforces average rate. Battle-tested in production systems (nginx, AWS API Gateway, Stripe). Simple to implement with well-defined math.
+
+---
+
+## D-056: Per-Provider Shared Buckets
+
+**Decision**: Rate limit buckets are shared per provider — all agents using the same API key share one bucket.
+
+**Alternatives considered**:
+- Per-model-instance — each `load_model()` gets its own bucket (multiplies effective rate)
+- Global single bucket — all providers share one (doesn't match provider rate limits)
+- Per-model per-provider — too granular, providers limit by key not model
+
+**Rationale**: Matches how provider rate limits actually work. 100 agents sharing an Anthropic key with 60 RPM must collectively stay under 60 RPM. Per-instance would each think they have 60 RPM.
+
+---
+
+## D-057: Module-Level Bucket Registry
+
+**Decision**: Module-level `_bucket_registry` dict in `rate_limit.py` maps provider names to `TokenBucket` instances.
+
+**Alternatives considered**:
+- Class-level dict on `RateLimitModule` — harder to test, same effect
+- Separate SharedState singleton — over-engineered for a dict
+
+**Rationale**: Simple, testable via `clear_buckets()`, consistent with the config cache pattern in `registry.py`. `clear_cache()` hooks into `clear_buckets()` automatically.
+
+---
+
+## D-058: Block + WARNING on Throttle
+
+**Decision**: When bucket is empty, `await asyncio.sleep()` until token refills. Emit WARNING log with provider name and wait duration.
+
+**Alternatives considered**:
+- Raise exception (immediate fail) — agents must handle, adds complexity
+- Callback/event notification — over-engineered for logging
+- Silent wait — no observability, hard to diagnose slow calls
+
+**Rationale**: Transparent to agents (`model.invoke()` just takes longer), ops gets visibility via WARNING logs. Best of both worlds.
+
+---
+
+## D-059: Separate burst_capacity Config
+
+**Decision**: `burst_capacity` is a separate config param, defaults to `requests_per_minute`, overridable via `load_model()`.
+
+**Alternatives considered**:
+- Always equal to RPM — no separate config
+- Hardcoded burst factor (e.g., 2x RPM) — inflexible
+
+**Rationale**: Separate param gives fine-grained control. Default = RPM means zero config needed. Override at call site for specific use cases.
+
+---
+
+## D-060: Rate Limit Innermost in Stack
+
+**Decision**: Stacking order: `Retry(Fallback(RateLimit(adapter)))` — rate limit is innermost module.
+
+**Alternatives considered**:
+- Outermost — would throttle retries and fallbacks, not just API calls
+- Between retry and fallback — inconsistent semantics
+
+**Rationale**: Rate limit wraps the adapter directly. Each actual API call (including retries and fallback attempts) is individually rate-limited. This matches the intent: throttle outgoing requests.
+
+---
+
+## D-061: Provider Name from inner.name
+
+**Decision**: Use `inner.name` property as the bucket registry key.
+
+**Alternatives considered**:
+- Separate `provider_name` config key — redundant, error-prone
+- Read from provider TOML — not available at module construction
+
+**Rationale**: `LLMProvider.name` is already defined on every adapter. No extra config, no ambiguity.
+
+---
+
+## D-062: Config Validation (RPM > 0, burst >= 1)
+
+**Decision**: Validate `requests_per_minute > 0` and `burst_capacity >= 1` at construction, raise `ArcLLMConfigError`.
+
+**Alternatives considered**:
+- Clamp to minimums silently — hides bugs
+- Warning log only — allows runtime errors later
+
+**Rationale**: Fail fast at construction. Consistent with RetryModule/FallbackModule validation pattern (D-053).
+
+---
+
+## D-063: clear_buckets() + clear_cache() Hook
+
+**Decision**: `clear_buckets()` function in `rate_limit.py`, hooked into `registry.clear_cache()`.
+
+**Alternatives considered**:
+- Fixture-only cleanup — fragile, easy to forget
+- No shared state (per-instance buckets) — defeats per-provider sharing (D-056)
+
+**Rationale**: Test isolation requires clearing shared state. `clear_cache()` already exists for config caches; adding `clear_buckets()` there ensures automatic cleanup.
+
+---

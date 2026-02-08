@@ -43,6 +43,7 @@ _LAZY_IMPORTS: dict[str, str] = {
     "OpenaiAdapter": "arcllm.adapters.openai",
     "BaseModule": "arcllm.modules.base",
     "FallbackModule": "arcllm.modules.fallback",
+    "RateLimitModule": "arcllm.modules.rate_limit",
     "RetryModule": "arcllm.modules.retry",
 }
 
@@ -64,6 +65,7 @@ __all__ = [
     # Modules (lazy — loaded on first access)
     "BaseModule",
     "FallbackModule",
+    "RateLimitModule",
     "RetryModule",
     # Config types
     "DefaultsConfig",

@@ -1,7 +1,7 @@
 {
-  "current_step": 8,
+  "current_step": 9,
   "current_task": null,
-  "completed_steps": [1, 2, 3, 4, 5, 6, 7],
+  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8],
   "step_plans": {
     "1": {
       "file": "arcllm-step-01-plan.md",
@@ -138,6 +138,28 @@
         "T7.7 Update registry.py for module stacking",
         "T7.8 Full test suite verification"
       ]
+    },
+    "8": {
+      "status": "complete",
+      "spec_id": "008",
+      "tasks": [
+        "T8.1 Update config.toml with burst_capacity",
+        "T8.2 Write test_rate_limit.py (TDD RED)",
+        "T8.3 Implement TokenBucket class",
+        "T8.4 Implement RateLimitModule",
+        "T8.5 Update registry.py and exports",
+        "T8.6 Update config.toml",
+        "T8.7 Full test suite verification"
+      ],
+      "completed_tasks": [
+        "T8.1 Update config.toml with burst_capacity",
+        "T8.2 Write test_rate_limit.py (TDD RED)",
+        "T8.3 Implement TokenBucket class",
+        "T8.4 Implement RateLimitModule",
+        "T8.5 Update registry.py and exports",
+        "T8.6 Update config.toml",
+        "T8.7 Full test suite verification"
+      ]
     }
   },
   "decisions": {
@@ -272,6 +294,60 @@
       "reason": "Review fix — avoids repeated model_dump() calls (2x per load_model() call). Cache populated on first global config load.",
       "date": "2026-02-08",
       "alternatives_considered": ["call model_dump() each time", "store raw pydantic objects"]
+    },
+    "D-055_rate_limit_algorithm": {
+      "decision": "Token bucket algorithm — capacity=burst size, refill_rate=RPM/60 tokens/sec",
+      "reason": "Allows bursts (good for agents waking simultaneously), enforces average rate, battle-tested (nginx, AWS API Gateway)",
+      "date": "2026-02-08",
+      "alternatives_considered": ["sliding window counter", "leaky bucket", "adaptive (monitor 429s)"]
+    },
+    "D-056_rate_limit_scope": {
+      "decision": "Per-provider shared buckets — all agents using same API key share one bucket",
+      "reason": "Matches how provider rate limits actually work. Per-instance would multiply the effective rate.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["per-model-instance", "global single bucket", "per-model per-provider"]
+    },
+    "D-057_shared_state_pattern": {
+      "decision": "Module-level registry dict in rate_limit.py — consistent with config cache pattern in registry.py",
+      "reason": "Simple, testable via clear_buckets(), same pattern used for config caching",
+      "date": "2026-02-08",
+      "alternatives_considered": ["class-level (on RateLimitModule)", "separate SharedState singleton"]
+    },
+    "D-058_throttle_behavior": {
+      "decision": "Block (async wait) + WARNING log when throttled",
+      "reason": "Transparent to agents, ops gets visibility into throttling via logs",
+      "date": "2026-02-08",
+      "alternatives_considered": ["raise exception (immediate fail)", "callback/event notification", "silent wait"]
+    },
+    "D-059_burst_config": {
+      "decision": "Separate burst_capacity param, defaults to requests_per_minute, overridable via load_model()",
+      "reason": "Global default in config.toml, overridable per-call. burst_capacity defaults to RPM for sane defaults.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["always equal to RPM", "hardcoded burst factor"]
+    },
+    "D-060_stack_order": {
+      "decision": "Rate limit innermost: Retry(Fallback(RateLimit(adapter)))",
+      "reason": "Rate limit wraps adapter directly — each actual API call is throttled. Retry/fallback wrap outside.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["outermost", "between retry and fallback"]
+    },
+    "D-061_provider_id": {
+      "decision": "Read inner.name for bucket lookup key",
+      "reason": "Consistent with LLMProvider.name property, already available, no extra config needed",
+      "date": "2026-02-08",
+      "alternatives_considered": ["separate provider_name config key", "read from provider TOML"]
+    },
+    "D-062_validation": {
+      "decision": "RPM > 0, burst_capacity >= 1 — raise ArcLLMConfigError on invalid values",
+      "reason": "Fail fast at construction, consistent with RetryModule/FallbackModule validation pattern",
+      "date": "2026-02-08",
+      "alternatives_considered": ["clamp to minimums silently", "warning log only"]
+    },
+    "D-063_test_cleanup": {
+      "decision": "clear_buckets() function + hooked into registry.clear_cache()",
+      "reason": "Test isolation requires clearing shared state between tests. Automatic via clear_cache().",
+      "date": "2026-02-08",
+      "alternatives_considered": ["fixture-only cleanup", "no shared state (per-instance buckets)"]
     }
   },
   "notes": [
@@ -311,7 +387,15 @@
     "  Fix 1 (D-053): Config validation — RetryModule rejects negative max_retries, non-positive backoff/max_wait; FallbackModule rejects chain >10",
     "  Fix 2 (D-052): Proportional jitter — uniform(0, backoff) not uniform(0, base), scales with retry attempt",
     "  Fix 3 (D-054): Module settings cache — pre-extract model_dump() into _module_settings_cache, avoids 2x serialization per load_model()",
-    "Post-review: 201 tests passing (194 + 7 new validation tests), 1 skipped"
+    "Post-review: 201 tests passing (194 + 7 new validation tests), 1 skipped",
+    "Step 8 complete — 7/7 tasks, 26 new tests (20 rate_limit + 6 registry), 244 total passing, 1 skipped",
+    "TokenBucket: token bucket algorithm with asyncio.Lock, sleep outside lock for concurrent safety",
+    "RateLimitModule: acquires token before invoke(), WARNING log when throttled",
+    "Per-provider shared buckets via module-level _bucket_registry dict",
+    "Registry: load_model() now accepts rate_limit= kwarg, stacking: Retry(Fallback(RateLimit(adapter)))",
+    "clear_cache() now calls clear_buckets() for rate limit state cleanup",
+    "Test mocking: freeze_then_advance pattern for time.monotonic — prevents refill from consuming tokens during wait check",
+    "Next: Step 9 — Router module"
   ],
   "meta": {
     "last_updated": "2026-02-08",

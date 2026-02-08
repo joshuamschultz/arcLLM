@@ -25,6 +25,9 @@ def clear_cache() -> None:
     _adapter_class_cache.clear()
     _global_config_cache = None
     _module_settings_cache.clear()
+    from arcllm.modules.rate_limit import clear_buckets
+
+    clear_buckets()
 
 
 def _get_adapter_class(provider_name: str) -> type[LLMProvider]:
@@ -107,6 +110,7 @@ def load_model(
     *,
     retry: bool | dict[str, Any] | None = None,
     fallback: bool | dict[str, Any] | None = None,
+    rate_limit: bool | dict[str, Any] | None = None,
 ) -> LLMProvider:
     """Load a configured model object for the given provider.
 
@@ -126,7 +130,7 @@ def load_model(
         - ``dict``: enable with custom settings (merged over defaults)
         - ``None`` (default): use config.toml enabled flag
 
-    Stacking order (outermost first): Retry → Fallback → Adapter.
+    Stacking order (outermost first): Retry → Fallback → RateLimit → Adapter.
 
     Args:
         provider: Provider name (e.g., "anthropic", "openai").
@@ -134,6 +138,7 @@ def load_model(
         model: Model identifier. If None, uses default_model from provider config.
         retry: RetryModule configuration override.
         fallback: FallbackModule configuration override.
+        rate_limit: RateLimitModule configuration override.
 
     Returns:
         A configured LLMProvider instance ready for invoke().
@@ -155,7 +160,13 @@ def load_model(
     # Construct adapter
     result: LLMProvider = adapter_class(config, model_name)
 
-    # Apply module wrapping (innermost first): Fallback, then Retry
+    # Apply module wrapping (innermost first): RateLimit, Fallback, Retry
+    rate_limit_config = _resolve_module_config("rate_limit", rate_limit)
+    if rate_limit_config is not None:
+        from arcllm.modules.rate_limit import RateLimitModule
+
+        result = RateLimitModule(rate_limit_config, result)
+
     fallback_config = _resolve_module_config("fallback", fallback)
     if fallback_config is not None:
         from arcllm.modules.fallback import FallbackModule

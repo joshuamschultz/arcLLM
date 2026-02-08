@@ -28,3 +28,4 @@ chain = ["anthropic", "openai"]
 [modules.rate_limit]
 enabled = false
 requests_per_minute = 60
+burst_capacity = 60

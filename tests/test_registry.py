@@ -315,3 +315,61 @@ class TestModuleStacking:
             model = load_model("anthropic", retry={"max_retries": 10})
         assert isinstance(model, RetryModule)
         assert model._max_retries == 10
+
+    def test_load_model_with_rate_limit(self):
+        """rate_limit=True wraps adapter with RateLimitModule."""
+        from arcllm.modules.rate_limit import RateLimitModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", rate_limit=True)
+        assert isinstance(model, RateLimitModule)
+
+    def test_load_model_with_rate_limit_dict(self):
+        """rate_limit={...} wraps adapter with custom RPM."""
+        from arcllm.modules.rate_limit import RateLimitModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", rate_limit={"requests_per_minute": 120})
+        assert isinstance(model, RateLimitModule)
+
+    def test_load_model_rate_limit_false_overrides_config(self):
+        """rate_limit=False disables even if config.toml enables it."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.rate_limit import RateLimitModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"rate_limit": ModuleConfig(enabled=True, requests_per_minute=60)},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            model = load_model("anthropic", rate_limit=False)
+        assert not isinstance(model, RateLimitModule)
+        assert isinstance(model, AnthropicAdapter)
+
+    def test_load_model_full_stack_order(self):
+        """Stacking order: Retry(Fallback(RateLimit(adapter)))."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.modules.fallback import FallbackModule
+        from arcllm.modules.rate_limit import RateLimitModule
+        from arcllm.modules.retry import RetryModule
+        from arcllm.registry import load_model
+
+        model = load_model(
+            "anthropic", retry=True, fallback=True, rate_limit=True
+        )
+        assert isinstance(model, RetryModule)
+        assert isinstance(model._inner, FallbackModule)
+        assert isinstance(model._inner._inner, RateLimitModule)
+        assert isinstance(model._inner._inner._inner, AnthropicAdapter)
+
+    def test_clear_cache_clears_buckets(self):
+        """clear_cache() resets rate limit shared state."""
+        from arcllm.modules.rate_limit import _bucket_registry
+        from arcllm.registry import clear_cache, load_model
+
+        load_model("anthropic", rate_limit=True)
+        assert "anthropic" in _bucket_registry
+        clear_cache()
+        assert len(_bucket_registry) == 0
