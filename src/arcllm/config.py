@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from arcllm.exceptions import ArcLLMConfigError
 
-_PROVIDER_NAME_RE = re.compile(r"^[a-z][a-z0-9\-]*$")
+_PROVIDER_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ def _validate_provider_name(provider_name: str) -> None:
     """Validate provider name is safe for path construction.
 
     Prevents path traversal (NIST 800-53 AC-3) by restricting to
-    lowercase alphanumeric + hyphens, max 64 characters.
+    lowercase alphanumeric + underscores, max 64 characters.
 
     Raises:
         ArcLLMConfigError: On invalid provider name.
@@ -131,7 +131,7 @@ def _validate_provider_name(provider_name: str) -> None:
         raise ArcLLMConfigError(
             f"Invalid provider name '{provider_name}'. "
             "Must start with a letter and contain only lowercase letters, "
-            "numbers, and hyphens."
+            "numbers, and underscores."
         )
 
 

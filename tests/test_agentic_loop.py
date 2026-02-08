@@ -39,7 +39,7 @@ async def main():
     MODEL = "claude-haiku-4-5-20251001"
     adapter = AnthropicAdapter(config, MODEL)
     print(f"\nAdapter name: {adapter.name}")
-    print(f"Model: {adapter._model_name}")
+    print(f"Model: {adapter.model_name}")
     print(
         f"Model meta: context_window={adapter._model_meta.context_window}, "
         f"supports_tools={adapter._model_meta.supports_tools}"

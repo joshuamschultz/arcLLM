@@ -40,6 +40,10 @@ class BaseAdapter(LLMProvider):
     def name(self) -> str:
         return self._config.provider.api_format
 
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
     async def invoke(
         self,
         messages: list[Message],

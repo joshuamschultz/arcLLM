@@ -26,7 +26,7 @@ _STOP_REASON_MAP: dict[str, StopReason] = {
 }
 
 
-class OpenAIAdapter(BaseAdapter):
+class OpenaiAdapter(BaseAdapter):
     """Translates ArcLLM types to/from the OpenAI Chat Completions API."""
 
     @property

@@ -141,23 +141,23 @@ def _make_openai_tool_response(
 
 class TestOpenAIHeaders:
     def test_openai_bearer_auth(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         headers = adapter._build_headers()
         assert headers["Authorization"] == "Bearer test-openai-key-456"
 
     def test_openai_content_type(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         headers = adapter._build_headers()
         assert headers["Content-Type"] == "application/json"
 
     def test_openai_name(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         assert adapter.name == "openai"
 
 
@@ -168,18 +168,18 @@ class TestOpenAIHeaders:
 
 class TestOpenAIRequestBuilding:
     def test_simple_text_request(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [Message(role="user", content="Hello")]
         body = adapter._build_request_body(messages)
         assert body["model"] == FAKE_MODEL
         assert body["messages"] == [{"role": "user", "content": "Hello"}]
 
     def test_system_message_inline(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [
             Message(role="system", content="You are helpful."),
             Message(role="user", content="Hi"),
@@ -192,9 +192,9 @@ class TestOpenAIRequestBuilding:
         assert body["messages"][1]["role"] == "user"
 
     def test_tool_formatting(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         tools = [
             Tool(
                 name="search",
@@ -219,9 +219,9 @@ class TestOpenAIRequestBuilding:
         assert "input_schema" not in tool["function"]
 
     def test_tool_result_flattening(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [
             Message(role="user", content="Search for cats"),
             Message(
@@ -243,9 +243,9 @@ class TestOpenAIRequestBuilding:
         assert body["messages"][2]["content"] == "Also found dogs"
 
     def test_tool_result_single(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [
             Message(
                 role="tool",
@@ -261,9 +261,9 @@ class TestOpenAIRequestBuilding:
         assert body["messages"][0]["content"] == "42"
 
     def test_assistant_tool_use_formatting(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [
             Message(
                 role="assistant",
@@ -284,9 +284,9 @@ class TestOpenAIRequestBuilding:
         assert tc["function"]["arguments"] == '{"x": 1}'
 
     def test_kwargs_override_defaults(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [Message(role="user", content="Hi")]
         body = adapter._build_request_body(messages, max_tokens=1000, temperature=0.2)
         assert body["max_tokens"] == 1000
@@ -300,9 +300,9 @@ class TestOpenAIRequestBuilding:
 
 class TestOpenAIResponseParsing:
     def test_text_response(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response(text="Hello world")
         resp = adapter._parse_response(data)
         assert isinstance(resp, LLMResponse)
@@ -311,9 +311,9 @@ class TestOpenAIResponseParsing:
         assert resp.stop_reason == "end_turn"
 
     def test_tool_use_response(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_tool_response(
             tool_id="call_1", tool_name="search", tool_args={"query": "cats"}
         )
@@ -325,9 +325,9 @@ class TestOpenAIResponseParsing:
         assert resp.stop_reason == "tool_use"
 
     def test_mixed_response(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_tool_response(
             text="Let me search for that.",
             tool_id="call_1",
@@ -339,9 +339,9 @@ class TestOpenAIResponseParsing:
         assert len(resp.tool_calls) == 1
 
     def test_null_content_response(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_tool_response()
         # Ensure content is None in the raw response
         data["choices"][0]["message"]["content"] = None
@@ -350,9 +350,9 @@ class TestOpenAIResponseParsing:
         assert len(resp.tool_calls) == 1
 
     def test_usage_parsing(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response(prompt_tokens=100, completion_tokens=50)
         resp = adapter._parse_response(data)
         assert resp.usage.input_tokens == 100
@@ -360,18 +360,18 @@ class TestOpenAIResponseParsing:
         assert resp.usage.total_tokens == 150
 
     def test_usage_reasoning_tokens(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response()
         data["usage"]["completion_tokens_details"] = {"reasoning_tokens": 25}
         resp = adapter._parse_response(data)
         assert resp.usage.reasoning_tokens == 25
 
     def test_raw_response_stored(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response()
         resp = adapter._parse_response(data)
         assert resp.raw is data
@@ -384,41 +384,41 @@ class TestOpenAIResponseParsing:
 
 class TestOpenAIStopReasonMapping:
     def test_stop_maps_to_end_turn(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response(finish_reason="stop")
         resp = adapter._parse_response(data)
         assert resp.stop_reason == "end_turn"
 
     def test_tool_calls_maps_to_tool_use(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_tool_response()
         resp = adapter._parse_response(data)
         assert resp.stop_reason == "tool_use"
 
     def test_length_maps_to_max_tokens(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response(finish_reason="length")
         resp = adapter._parse_response(data)
         assert resp.stop_reason == "max_tokens"
 
     def test_content_filter_maps_to_content_filter(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response(finish_reason="content_filter")
         resp = adapter._parse_response(data)
         assert resp.stop_reason == "content_filter"
 
     def test_unknown_finish_reason_defaults_to_end_turn(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = _make_openai_text_response(finish_reason="some_future_reason")
         resp = adapter._parse_response(data)
         assert resp.stop_reason == "end_turn"
@@ -431,9 +431,9 @@ class TestOpenAIStopReasonMapping:
 
 class TestOpenAIToolCallParsing:
     def test_tool_call_json_string_arguments(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         tc = {
             "id": "call_1",
             "type": "function",
@@ -446,9 +446,9 @@ class TestOpenAIToolCallParsing:
         assert result.arguments == {"x": 1, "y": 2}
 
     def test_tool_call_dict_arguments(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         tc = {
             "id": "call_1",
             "type": "function",
@@ -461,9 +461,9 @@ class TestOpenAIToolCallParsing:
         assert result.arguments == {"x": 1}
 
     def test_tool_call_bad_arguments(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         tc = {
             "id": "call_1",
             "type": "function",
@@ -476,9 +476,9 @@ class TestOpenAIToolCallParsing:
             adapter._parse_tool_call(tc)
 
     def test_tool_call_unexpected_argument_type(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         tc = {
             "id": "call_1",
             "type": "function",
@@ -499,9 +499,9 @@ class TestOpenAIToolCallParsing:
 class TestOpenAIErrorHandling:
     @pytest.mark.asyncio
     async def test_http_429_error(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         mock_response = httpx.Response(
             429,
             text="rate limited",
@@ -517,9 +517,9 @@ class TestOpenAIErrorHandling:
 
     @pytest.mark.asyncio
     async def test_http_401_error(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         mock_response = httpx.Response(
             401,
             text="unauthorized",
@@ -534,9 +534,9 @@ class TestOpenAIErrorHandling:
 
     @pytest.mark.asyncio
     async def test_http_500_error(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         mock_response = httpx.Response(
             500,
             text="internal server error",
@@ -558,9 +558,9 @@ class TestOpenAIErrorHandling:
 class TestOpenAIFullCycle:
     @pytest.mark.asyncio
     async def test_complete_text_cycle(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         response_data = _make_openai_text_response(text="Hello!")
         mock_response = httpx.Response(
             200,
@@ -578,9 +578,9 @@ class TestOpenAIFullCycle:
 
     @pytest.mark.asyncio
     async def test_complete_tool_cycle(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         response_data = _make_openai_tool_response(
             tool_id="call_1", tool_name="search", tool_args={"query": "cats"}
         )
@@ -618,9 +618,9 @@ class TestOpenAIFullCycle:
 
 class TestOpenAIEdgeCases:
     def test_multiple_tool_calls_in_response(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         data = {
             "id": "chatcmpl-test",
             "object": "chat.completion",
@@ -666,9 +666,9 @@ class TestOpenAIEdgeCases:
         assert resp.stop_reason == "tool_use"
 
     def test_list_content_block_tool_result(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [
             Message(
                 role="tool",
@@ -685,9 +685,9 @@ class TestOpenAIEdgeCases:
         assert body["messages"][0]["content"] == "Result A Result B"
 
     def test_mixed_assistant_content_formatting(self):
-        from arcllm.adapters.openai import OpenAIAdapter
+        from arcllm.adapters.openai import OpenaiAdapter
 
-        adapter = OpenAIAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
         messages = [
             Message(
                 role="assistant",

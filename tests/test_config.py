@@ -139,7 +139,7 @@ def test_provider_name_too_long():
         load_provider_config("a" * 65)
 
 
-@pytest.mark.parametrize("name", ["../evil", "pro/vider", "a@b", "a b", ".hidden"])
+@pytest.mark.parametrize("name", ["../evil", "pro/vider", "a@b", "a b", ".hidden", "my-hyphen"])
 def test_invalid_provider_names(name):
     with pytest.raises(ArcLLMConfigError):
         load_provider_config(name)
@@ -148,7 +148,7 @@ def test_invalid_provider_names(name):
 def test_valid_provider_name_format():
     _validate_provider_name("anthropic")
     _validate_provider_name("openai")
-    _validate_provider_name("my-custom-provider")
+    _validate_provider_name("my_custom_provider")
     _validate_provider_name("o1")
 
 
@@ -167,12 +167,12 @@ def test_malformed_toml_raises_config_error(tmp_path):
 def test_malformed_provider_toml_raises_config_error(tmp_path):
     providers_dir = tmp_path / "providers"
     providers_dir.mkdir()
-    bad_toml = providers_dir / "bad-provider.toml"
+    bad_toml = providers_dir / "badprovider.toml"
     bad_toml.write_text("not valid toml = = =")
 
     with patch("arcllm.config._get_config_dir", return_value=tmp_path):
         with pytest.raises(ArcLLMConfigError, match="Failed to parse"):
-            load_provider_config("bad-provider")
+            load_provider_config("badprovider")
 
 
 def test_invalid_types_in_global_config_raises_config_error(tmp_path):
@@ -187,7 +187,7 @@ def test_invalid_types_in_global_config_raises_config_error(tmp_path):
 def test_invalid_types_in_provider_config_raises_config_error(tmp_path):
     providers_dir = tmp_path / "providers"
     providers_dir.mkdir()
-    invalid_toml = providers_dir / "bad-types.toml"
+    invalid_toml = providers_dir / "badtypes.toml"
     invalid_toml.write_text(
         '[provider]\napi_format = 123\nbase_url = true\n'
         'api_key_env = "OK"\ndefault_model = "OK"\ndefault_temperature = "nope"\n'
@@ -195,7 +195,7 @@ def test_invalid_types_in_provider_config_raises_config_error(tmp_path):
 
     with patch("arcllm.config._get_config_dir", return_value=tmp_path):
         with pytest.raises(ArcLLMConfigError, match="Invalid provider config"):
-            load_provider_config("bad-types")
+            load_provider_config("badtypes")
 
 
 def test_missing_global_config_raises_config_error(tmp_path):

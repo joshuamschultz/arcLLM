@@ -1,7 +1,7 @@
 {
-  "current_step": 5,
+  "current_step": 7,
   "current_task": null,
-  "completed_steps": [1, 2, 3, 4],
+  "completed_steps": [1, 2, 3, 4, 5, 6],
   "step_plans": {
     "1": {
       "file": "arcllm-step-01-plan.md",
@@ -85,16 +85,34 @@
       "tasks": [
         "T5.1 Add StopReason type to types.py",
         "T5.2 Write test_openai.py (TDD RED)",
-        "T5.3 Create OpenAIAdapter in adapters/openai.py",
+        "T5.3 Create OpenaiAdapter in adapters/openai.py",
         "T5.4 Update __init__.py with new exports",
         "T5.5 Full test suite verification"
       ],
       "completed_tasks": [
         "T5.1 Add StopReason type to types.py",
         "T5.2 Write test_openai.py (TDD RED)",
-        "T5.3 Create OpenAIAdapter in adapters/openai.py",
+        "T5.3 Create OpenaiAdapter in adapters/openai.py",
         "T5.4 Update __init__.py with new exports",
         "T5.5 Full test suite verification"
+      ]
+    },
+    "6": {
+      "status": "complete",
+      "spec_id": "006",
+      "tasks": [
+        "T6.1 Rename OpenAIAdapter to OpenaiAdapter",
+        "T6.2 Write test_registry.py (TDD RED)",
+        "T6.3 Create registry.py",
+        "T6.4 Update __init__.py",
+        "T6.5 Full test suite verification"
+      ],
+      "completed_tasks": [
+        "T6.1 Rename OpenAIAdapter to OpenaiAdapter",
+        "T6.2 Write test_registry.py (TDD RED)",
+        "T6.3 Create registry.py",
+        "T6.4 Update __init__.py",
+        "T6.5 Full test suite verification"
       ]
     }
   },
@@ -146,6 +164,42 @@
       "reason": "Proven in Step 3; consistency across adapters for maintainability and learnability",
       "date": "2026-02-07",
       "alternatives_considered": ["different structure optimized for OpenAI's simpler API"]
+    },
+    "D-041_convention_based_registry": {
+      "decision": "Provider name drives TOML path, module path, and class name by convention",
+      "reason": "File structure is the registry. Zero config for discovery. No mapping dict to maintain.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["static mapping dict", "TOML adapter_module field + importlib", "entry_points plugin system"]
+    },
+    "D-042_class_name_convention": {
+      "decision": "provider_name.title() + 'Adapter' — renamed OpenAIAdapter to OpenaiAdapter",
+      "reason": "Predictable, no exception maps. Pure convention means zero maintenance.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["exception dict for known cases", "scan module for BaseAdapter subclass"]
+    },
+    "D-043_module_level_config_cache": {
+      "decision": "Cache ProviderConfig in module-level dict with clear_cache() for testing",
+      "reason": "Avoids re-parsing TOML per load_model() call. Essential at scale with thousands of agents.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["load every time", "explicit Registry object"]
+    },
+    "D-044_no_kwargs_load_model": {
+      "decision": "Remove **kwargs from load_model() — only provider and model params",
+      "reason": "BaseAdapter.__init__ doesn't accept **kwargs; forwarding them causes confusing TypeError at adapter construction time instead of clear API error",
+      "date": "2026-02-08",
+      "alternatives_considered": ["keep **kwargs and add to BaseAdapter", "catch TypeError and wrap in ArcLLMConfigError"]
+    },
+    "D-045_no_hyphens_provider_names": {
+      "decision": "Provider name regex allows underscores but not hyphens: ^[a-z][a-z0-9_]*$",
+      "reason": "Provider name maps to Python module name via convention; hyphens are invalid in Python identifiers. Allowing them would pass validation but fail at import.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["keep hyphens and auto-convert to underscores at import time"]
+    },
+    "D-046_lazy_adapter_imports": {
+      "decision": "Adapter classes lazy-loaded via __getattr__ in __init__.py, not eagerly imported",
+      "reason": "import arcllm should not trigger httpx loading; adapters loaded on-demand by load_model() or explicit attribute access",
+      "date": "2026-02-08",
+      "alternatives_considered": ["remove adapters from __init__.py entirely", "keep eager imports"]
     }
   },
   "notes": [
@@ -156,21 +210,24 @@
     "BaseAdapter: concrete base with httpx client, API key resolution, async context manager",
     "AnthropicAdapter: full request/response translation, all 4 content block types, tool call parsing",
     "Mocking: AsyncMock + httpx.Response (not MockTransport) — cleaner for unit testing",
-    "Decision log at .claude/decision-log.md (D-001 through D-040)",
-    "Next step: Step 4 — Test harness — agentic loop",
+    "Decision log at .claude/decision-log.md (D-001 through D-043)",
     "Step 4 complete — Jupyter notebook + script for live API testing",
-    "4 tests: simple text, calculator loop, search loop, multi-tool loop",
-    "All 4 passed against claude-haiku-4-5-20251001, 3094 tokens total",
-    "Decision: notebook approach (not pytest mocks) since goal is validating unified interface with real API",
-    "Decision: both calculator and web_search tools for testing",
-    "Files: walkthrough/step_04_agentic_loop.ipynb + walkthrough/run_step_04.py",
-    "Next step: Step 5 — OpenAI adapter",
-    "Step 5 spec created at .claude/specs/005-openai-adapter/ (PRD, SDD, PLAN, README)",
-    "Step 5 decisions: D-038 StopReason normalization, D-039 tool result flattening, D-040 mirror adapter structure",
-    "Step 5 has 5 tasks: T5.1 StopReason type, T5.2 test_openai.py (TDD), T5.3 OpenAI adapter, T5.4 exports, T5.5 verification"
+    "Step 5 complete — OpenAI adapter with StopReason normalization",
+    "Step 6 complete — 5/5 tasks, 13 new tests, 138 total tests passing in 4.19s",
+    "Convention-based registry: provider name drives TOML, module, and class lookup",
+    "Renamed OpenAIAdapter -> OpenaiAdapter for convention compliance",
+    "registry.py: 73 lines — load_model(), clear_cache(), _get_adapter_class()",
+    "Module-level config cache — configs loaded once per provider, clear_cache() for testing",
+    "Phase 1 (Core Foundation) now COMPLETE — Steps 1-6 all done",
+    "Step 6 review — 6-agent swarm review, CONDITIONAL PASS, 3 fixes applied:",
+    "  Fix 1: Removed **kwargs from load_model() — latent TypeError on adapter construction",
+    "  Fix 2: Tightened provider name regex — hyphens disallowed (invalid Python module names), underscores allowed",
+    "  Fix 3: Lazy adapter imports via __getattr__ — httpx no longer loaded at import arcllm time",
+    "Post-fix: 139 tests passing (138 + 1 new hyphen-rejection test), 1 skipped",
+    "Next: Phase 2 (Module System) — Step 7: Fallback + retry"
   ],
   "meta": {
-    "last_updated": "2026-02-07",
+    "last_updated": "2026-02-08",
     "created": "2026-02-07"
   }
 }

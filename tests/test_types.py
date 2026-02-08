@@ -17,7 +17,6 @@ from arcllm import (
     ToolResultBlock,
     ToolUseBlock,
     Usage,
-    load_model,
 )
 
 
@@ -212,14 +211,6 @@ def test_llmprovider_concrete_subclass():
     provider = FakeProvider()
     assert provider.name == "fake"
     assert provider.validate_config() is True
-
-
-# --- load_model placeholder ---
-
-
-def test_load_model_not_implemented():
-    with pytest.raises(NotImplementedError):
-        load_model("openai")
 
 
 # --- SDD edge cases ---

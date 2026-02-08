@@ -162,7 +162,7 @@ class TestBaseAdapter:
     def test_base_adapter_stores_config(self):
         adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
         assert adapter._config is FAKE_CONFIG
-        assert adapter._model_name == FAKE_MODEL
+        assert adapter.model_name == FAKE_MODEL
 
     def test_base_adapter_resolves_api_key(self):
         adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)

@@ -15,10 +15,8 @@ This project follows a **guided building process**. The spec builder (Josh) lear
 ### Rules
 
 1. **Explain concepts FIRST** (what and why), then give build instructions
-2. **Never dump code for Josh to paste** — give instructions to write code 
 3. **At EVERY design decision**: present 2-4 options with tradeoffs, relate to ArcLLM's context (agents, scale, security), reference prior art (LiteLLM, pi-ai), then **ASK and WAIT**
 4. **Verify together** before moving to the next task
-5. **Exception**: If Josh explicitly asks "just write it" or "show me the code", provide code
 
 ### If Unclear About Anything
 

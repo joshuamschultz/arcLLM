@@ -1,8 +1,7 @@
 """ArcLLM — Unified LLM abstraction layer for autonomous agents."""
 
-from arcllm.adapters.anthropic import AnthropicAdapter
-from arcllm.adapters.base import BaseAdapter
-from arcllm.adapters.openai import OpenAIAdapter
+import importlib
+
 from arcllm.config import (
     DefaultsConfig,
     GlobalConfig,
@@ -19,6 +18,7 @@ from arcllm.exceptions import (
     ArcLLMError,
     ArcLLMParseError,
 )
+from arcllm.registry import clear_cache, load_model
 from arcllm.types import (
     ContentBlock,
     ImageBlock,
@@ -34,11 +34,30 @@ from arcllm.types import (
     Usage,
 )
 
+# Adapter classes are lazily imported to avoid loading httpx at import time.
+# Access via `from arcllm import AnthropicAdapter` still works — __getattr__
+# handles the deferred import on first access.
+_LAZY_IMPORTS: dict[str, str] = {
+    "AnthropicAdapter": "arcllm.adapters.anthropic",
+    "BaseAdapter": "arcllm.adapters.base",
+    "OpenaiAdapter": "arcllm.adapters.openai",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_IMPORTS:
+        module = importlib.import_module(_LAZY_IMPORTS[name])
+        attr = getattr(module, name)
+        globals()[name] = attr  # cache for subsequent accesses
+        return attr
+    raise AttributeError(f"module 'arcllm' has no attribute {name!r}")
+
+
 __all__ = [
-    # Adapters
+    # Adapters (lazy — loaded on first access)
     "AnthropicAdapter",
     "BaseAdapter",
-    "OpenAIAdapter",
+    "OpenaiAdapter",
     # Config types
     "DefaultsConfig",
     "GlobalConfig",
@@ -68,15 +87,6 @@ __all__ = [
     "ArcLLMError",
     "ArcLLMParseError",
     # Public API
+    "clear_cache",
     "load_model",
 ]
-
-
-def load_model(provider: str, model: str | None = None, **kwargs) -> LLMProvider:
-    """Load a model object for the given provider.
-
-    Placeholder — will be implemented in Step 6 (Provider Registry).
-    """
-    raise NotImplementedError(
-        "load_model() is not yet implemented. Coming in Step 6."
-    )
