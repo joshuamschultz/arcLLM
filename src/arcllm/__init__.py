@@ -1,5 +1,15 @@
 """ArcLLM — Unified LLM abstraction layer for autonomous agents."""
 
+from arcllm.config import (
+    DefaultsConfig,
+    GlobalConfig,
+    ModelMetadata,
+    ModuleConfig,
+    ProviderConfig,
+    ProviderSettings,
+    load_global_config,
+    load_provider_config,
+)
 from arcllm.exceptions import ArcLLMConfigError, ArcLLMError, ArcLLMParseError
 from arcllm.types import (
     ContentBlock,
@@ -16,6 +26,16 @@ from arcllm.types import (
 )
 
 __all__ = [
+    # Config types
+    "DefaultsConfig",
+    "GlobalConfig",
+    "ModelMetadata",
+    "ModuleConfig",
+    "ProviderConfig",
+    "ProviderSettings",
+    # Config loaders
+    "load_global_config",
+    "load_provider_config",
     # Types
     "ContentBlock",
     "ImageBlock",

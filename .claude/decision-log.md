@@ -393,3 +393,77 @@ Key findings from research:
 **Rationale**: Each step validates the previous one. Types first because everything depends on them. Config second because adapters need it. Single adapter (Anthropic) proves end-to-end works. Test loop verifies the agentic cycle. Second adapter (OpenAI) forces the abstraction — if it works for two providers, it works for N. Registry provides the public API. Modules come last because they compose on top of a working core.
 
 ---
+
+## D-031: Config Data Model
+
+**Decision**: Pydantic models for all config types (typed configs)
+
+**Alternatives considered**:
+- Pydantic BaseModel classes for config — typed, validated on load, same pattern as core types
+- Dataclasses + manual validation — lighter weight but more code, no automatic validation
+- TypedDict / plain dicts — minimal code, no validation at load time
+
+**Rationale**: Config errors in production autonomous agents are catastrophic — wrong base_url, missing api_key_env, model name typo. These agents run unattended. Fail-fast validation is critical. Pydantic v2 is already in the dependency tree. Using raw dicts delays error discovery to runtime when it's hardest to debug.
+
+**Influence**: LiteLLM uses raw dicts from YAML — config errors surface late (at API call time). pi-ai has typed config objects — errors caught at load time. ArcLLM follows pi-ai's approach.
+
+---
+
+## D-032: Config Validation Timing
+
+**Decision**: Validate on load (fail-fast)
+
+**Alternatives considered**:
+- Validate on load — `tomllib.load()` → pydantic model → errors raised immediately
+- Validate on first use — load as raw dict, validate when provider is actually needed (lazy)
+- Two-phase — structural validation on load, semantic validation on use
+
+**Rationale**: "Don't try to debug config at the same time as an LLM call." For agents running in production, fail-fast is the right default. Structural validation (does the TOML parse? are required fields present? are types correct?) happens on load. Semantic validation (is the API key actually set in env? is the base_url reachable?) is the adapter's job via `validate_config()`.
+
+---
+
+## D-033: Config Merge Strategy
+
+**Decision**: Simple override chain — args > provider > global, flat merge, last-writer-wins
+
+**Alternatives considered**:
+- Simple override chain — provider overrides global, kwargs override everything
+- Deep merge — nested dicts merged recursively
+- Explicit layers — keep global and provider as separate objects, adapter resolves
+
+**Rationale**: TOML structure is flat-ish tables. Deep merge is overkill. The real merge happens at call time (Step 6): global defaults provide fallback values, provider config overrides those, and kwargs at `load_model()` or `complete()` override everything. Simple, predictable, debuggable.
+
+---
+
+## D-034: Config File Discovery
+
+**Decision**: Package-relative — use `Path(__file__).parent` to find config files
+
+**Alternatives considered**:
+- Package-relative via `__file__` — config found relative to installed package
+- CWD-relative — look in current working directory
+- Package defaults + override path — ship defaults, env var for override directory
+- `importlib.resources` — more formal package resource API
+
+**Rationale**: Config is part of the unified layer — it ships with the library. `__file__` works in both dev mode (`pip install -e`) and installed mode. No external path configuration needed. CWD-relative breaks when agents run from different directories. `importlib.resources` adds complexity for no benefit when files are alongside Python code.
+
+---
+
+## D-035: Provider Name Input Validation
+
+**Decision**: Strict regex validation (`^[a-z][a-z0-9\-]*$`, max 64 chars) on `provider_name` parameter before path construction
+
+**Alternatives considered**:
+- No validation — rely on FileNotFoundError for bad names
+- Path resolution check — construct path, then verify it resolves within `providers/` directory
+- Allowlist — only accept known provider names from a registry
+
+**Rationale**: `load_provider_config(provider_name)` interpolates the name directly into a file path (`providers/{name}.toml`). Without validation, path traversal attacks (`../../etc/passwd`) could read arbitrary `.toml` files. For a library targeting federal production (BlackArc Systems, CTG Federal), this is a compliance violation.
+
+**Compliance**: NIST 800-53 AC-3 (Access Enforcement) — system must enforce approved authorizations for logical access to information. Unrestricted file path construction from user input violates this control. OWASP A01 (Broken Access Control) — path traversal is a direct violation.
+
+**Implementation**: Regex validation at function entry, before any path construction. Rejects empty, too-long, uppercase, special characters, and path separators. Raises `ArcLLMConfigError` with clear message.
+
+**Why not allowlist**: Provider configs are file-driven — new providers are added by dropping a TOML file, not by modifying code. An allowlist would break this extensibility.
+
+---

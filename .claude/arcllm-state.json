@@ -1,7 +1,7 @@
 {
-  "current_step": 2,
+  "current_step": 3,
   "current_task": null,
-  "completed_steps": [1],
+  "completed_steps": [1, 2],
   "step_plans": {
     "1": {
       "file": "arcllm-step-01-plan.md",
@@ -25,14 +25,66 @@
         "6. Create test_types.py",
         "7. Create .env.example"
       ]
+    },
+    "2": {
+      "status": "complete",
+      "spec_id": "002",
+      "tasks": [
+        "T2.1 Create global config.toml",
+        "T2.2 Create provider TOML files",
+        "T2.3 Create config.py with models and loaders",
+        "T2.4 Update __init__.py with config exports",
+        "T2.5 Create test_config.py"
+      ],
+      "completed_tasks": [
+        "T2.1 Create global config.toml",
+        "T2.2 Create provider TOML files",
+        "T2.3 Create config.py with models and loaders",
+        "T2.4 Update __init__.py with config exports",
+        "T2.5 Create test_config.py"
+      ]
     }
   },
-  "decisions": {},
+  "decisions": {
+    "D-031_config_data_model": {
+      "decision": "Pydantic models for all config types (typed configs)",
+      "reason": "Fail-fast validation critical for unattended agents; pydantic already in deps",
+      "date": "2026-02-07",
+      "alternatives_considered": ["dataclasses + manual validation", "TypedDict / plain dicts"]
+    },
+    "D-032_config_validation_timing": {
+      "decision": "Validate on load (fail-fast)",
+      "reason": "Don't debug config during LLM call; catch errors at startup",
+      "date": "2026-02-07",
+      "alternatives_considered": ["validate on first use (lazy)", "two-phase (structural then semantic)"]
+    },
+    "D-033_config_merge_strategy": {
+      "decision": "Simple override chain — args > provider > global, flat merge, last-writer-wins",
+      "reason": "TOML structure is flat-ish; deep merge is overkill",
+      "date": "2026-02-07",
+      "alternatives_considered": ["deep merge", "explicit layers (separate objects)"]
+    },
+    "D-034_config_file_discovery": {
+      "decision": "Package-relative via Path(__file__).parent",
+      "reason": "Config ships with the library; __file__ works in dev and installed modes",
+      "date": "2026-02-07",
+      "alternatives_considered": ["CWD-relative", "importlib.resources", "env var override path"]
+    },
+    "D-035_provider_name_validation": {
+      "decision": "Strict regex validation on provider_name before path construction",
+      "reason": "Path traversal prevention — NIST 800-53 AC-3, OWASP A01 compliance for federal production",
+      "date": "2026-02-07",
+      "alternatives_considered": ["no validation", "path resolution check", "allowlist"]
+    }
+  },
   "notes": [
-    "Step 1 complete — 7/7 tasks, 12/12 tests passing, all acceptance criteria met",
-    "Build backend corrected from setuptools.backends._legacy:_Backend to setuptools.build_meta",
-    "Steps 2-16 have no plans yet — will discuss and plan together when reached",
-    "Next step: Step 2 — Config Loading (global + provider TOMLs)"
+    "Step 1 complete — 7/7 tasks, 20/20 tests passing",
+    "Step 2 complete — 5/5 tasks, 10/10 new tests, 30/30 total tests passing in 0.13s",
+    "Step 2 review fixes — path traversal prevention (D-035), error path tests, DRY refactor. 45/45 tests, 100% coverage",
+    "Decision log at .claude/decision-log.md (D-001 through D-035)",
+    "pyproject.toml updated with [tool.setuptools.package-data] for TOML files",
+    "ModuleConfig extra='allow' works cleanly for module-specific settings",
+    "Next step: Step 3 — Anthropic adapter with tool support"
   ],
   "meta": {
     "last_updated": "2026-02-07",

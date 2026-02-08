@@ -1,0 +1,30 @@
+[defaults]
+provider = "anthropic"
+temperature = 0.7
+max_tokens = 4096
+
+[modules.routing]
+enabled = false
+
+[modules.telemetry]
+enabled = false
+
+[modules.audit]
+enabled = false
+
+[modules.budget]
+enabled = false
+monthly_limit_usd = 500.00
+
+[modules.retry]
+enabled = false
+max_retries = 3
+backoff_base_seconds = 1.0
+
+[modules.fallback]
+enabled = false
+chain = ["anthropic", "openai"]
+
+[modules.rate_limit]
+enabled = false
+requests_per_minute = 60
