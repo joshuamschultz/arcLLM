@@ -1,5 +1,6 @@
 """Tests for RetryModule — exponential backoff with jitter."""
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -301,3 +302,93 @@ class TestRetryValidation:
         inner = _make_inner([_OK_RESPONSE])
         module = RetryModule({"max_retries": 0}, inner)
         assert module._max_retries == 0
+
+
+# ---------------------------------------------------------------------------
+# TestRetryAfterHeader
+# ---------------------------------------------------------------------------
+
+
+class TestRetryAfterHeader:
+    @patch("arcllm.modules.retry.asyncio.sleep", new_callable=AsyncMock)
+    async def test_retry_after_honored(self, mock_sleep, messages):
+        """Retry-After header value is used instead of calculated backoff."""
+        config = {
+            "max_retries": 1,
+            "backoff_base_seconds": 1.0,
+            "max_wait_seconds": 100.0,
+            "retryable_status_codes": [429],
+        }
+        error = ArcLLMAPIError(
+            status_code=429, body="rate limited", provider="test", retry_after=5.0
+        )
+        inner = _make_inner([error, _OK_RESPONSE])
+        module = RetryModule(config, inner)
+        result = await module.invoke(messages)
+        assert result.content == "ok"
+        mock_sleep.assert_awaited_once_with(5.0)
+
+    @patch("arcllm.modules.retry.asyncio.sleep", new_callable=AsyncMock)
+    async def test_retry_after_capped_at_max_wait(self, mock_sleep, messages):
+        """Retry-After value is capped at max_wait_seconds."""
+        config = {
+            "max_retries": 1,
+            "backoff_base_seconds": 1.0,
+            "max_wait_seconds": 3.0,
+            "retryable_status_codes": [429],
+        }
+        error = ArcLLMAPIError(
+            status_code=429, body="rate limited", provider="test", retry_after=10.0
+        )
+        inner = _make_inner([error, _OK_RESPONSE])
+        module = RetryModule(config, inner)
+        await module.invoke(messages)
+        mock_sleep.assert_awaited_once_with(3.0)
+
+    @patch("arcllm.modules.retry.asyncio.sleep", new_callable=AsyncMock)
+    async def test_no_retry_after_uses_backoff(self, mock_sleep, messages):
+        """Without Retry-After, normal backoff is used."""
+        config = {
+            "max_retries": 1,
+            "backoff_base_seconds": 1.0,
+            "max_wait_seconds": 100.0,
+            "retryable_status_codes": [429],
+        }
+        error = ArcLLMAPIError(
+            status_code=429, body="rate limited", provider="test", retry_after=None
+        )
+        inner = _make_inner([error, _OK_RESPONSE])
+        module = RetryModule(config, inner)
+        with patch("arcllm.modules.retry.random.uniform", return_value=0.0):
+            await module.invoke(messages)
+        # backoff = 1.0 * 2^0 = 1.0, jitter = 0.0
+        mock_sleep.assert_awaited_once_with(1.0)
+
+
+# ---------------------------------------------------------------------------
+# TestRetryLogging
+# ---------------------------------------------------------------------------
+
+
+class TestRetryLogging:
+    async def test_logs_retry_attempts(self, messages, default_config, caplog):
+        inner = _make_inner([_api_error(429), _OK_RESPONSE])
+        module = RetryModule(default_config, inner)
+        with caplog.at_level(logging.WARNING, logger="arcllm.modules.retry"):
+            await module.invoke(messages)
+        assert "Retry attempt 1/3" in caplog.text
+
+    async def test_logs_exhaustion(self, messages, default_config, caplog):
+        inner = _make_inner([_api_error(429)] * 4)
+        module = RetryModule(default_config, inner)
+        with caplog.at_level(logging.ERROR, logger="arcllm.modules.retry"):
+            with pytest.raises(ArcLLMAPIError):
+                await module.invoke(messages)
+        assert "All 3 retries exhausted" in caplog.text
+
+    async def test_no_log_on_success(self, messages, default_config, caplog):
+        inner = _make_inner([_OK_RESPONSE])
+        module = RetryModule(default_config, inner)
+        with caplog.at_level(logging.WARNING, logger="arcllm.modules.retry"):
+            await module.invoke(messages)
+        assert caplog.text == ""

@@ -158,48 +158,60 @@ class TestArcLLMAPIError:
 # ---------------------------------------------------------------------------
 
 
+class _ConcreteAdapter(BaseAdapter):
+    """Minimal concrete subclass for testing BaseAdapter plumbing."""
+
+    async def invoke(
+        self,
+        messages: list[Message],
+        tools: list[Tool] | None = None,
+        **kwargs,
+    ) -> LLMResponse:
+        raise NotImplementedError("stub")
+
+
 class TestBaseAdapter:
     def test_base_adapter_stores_config(self):
-        adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL)
         assert adapter._config is FAKE_CONFIG
         assert adapter.model_name == FAKE_MODEL
 
     def test_base_adapter_resolves_api_key(self):
-        adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL)
         assert adapter._api_key == "test-ant-key-123"
 
     def test_base_adapter_missing_api_key_raises(self, monkeypatch):
         monkeypatch.delenv("ARCLLM_TEST_KEY", raising=False)
         with pytest.raises(ArcLLMConfigError, match="Missing environment variable"):
-            BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
+            _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL)
 
     def test_base_adapter_empty_api_key_raises(self, monkeypatch):
         monkeypatch.setenv("ARCLLM_TEST_KEY", "")
         with pytest.raises(ArcLLMConfigError, match="Missing environment variable"):
-            BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
+            _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL)
 
     @pytest.mark.asyncio
     async def test_base_adapter_context_manager(self):
-        async with BaseAdapter(FAKE_CONFIG, FAKE_MODEL) as adapter:
+        async with _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL) as adapter:
             assert adapter._client is not None
         assert adapter._client is None
 
     def test_base_adapter_model_meta_found(self):
-        adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL)
         assert adapter._model_meta is not None
         assert adapter._model_meta.context_window == 200000
 
     def test_base_adapter_model_meta_not_found(self):
-        adapter = BaseAdapter(FAKE_CONFIG, "nonexistent-model")
+        adapter = _ConcreteAdapter(FAKE_CONFIG, "nonexistent-model")
         assert adapter._model_meta is None
 
     def test_base_adapter_validate_config(self):
-        adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL)
         assert adapter.validate_config() is True
 
     @pytest.mark.asyncio
     async def test_base_adapter_close_idempotent(self):
-        adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
+        adapter = _ConcreteAdapter(FAKE_CONFIG, FAKE_MODEL)
         await adapter.close()
         await adapter.close()  # should not raise
 

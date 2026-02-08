@@ -34,3 +34,8 @@ class BaseModule(LLMProvider):
 
     def validate_config(self) -> bool:
         return self._inner.validate_config()
+
+    async def close(self) -> None:
+        """Close resources held by the inner provider."""
+        if hasattr(self._inner, "close"):
+            await self._inner.close()

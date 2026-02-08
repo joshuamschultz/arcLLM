@@ -44,14 +44,6 @@ class BaseAdapter(LLMProvider):
     def model_name(self) -> str:
         return self._model_name
 
-    async def invoke(
-        self,
-        messages: list[Message],
-        tools: list[Tool] | None = None,
-        **kwargs: Any,
-    ) -> LLMResponse:
-        raise NotImplementedError
-
     def _parse_arguments(self, raw: Any) -> dict[str, Any]:
         """Parse tool call arguments from provider response.
 
@@ -81,6 +73,17 @@ class BaseAdapter(LLMProvider):
             "temperature", self._config.provider.default_temperature
         )
         return max_tokens, temperature
+
+    @staticmethod
+    def _parse_retry_after(response: httpx.Response) -> float | None:
+        """Extract Retry-After header value as seconds, or None."""
+        value = response.headers.get("retry-after")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
 
     def validate_config(self) -> bool:
         return bool(self._api_key)

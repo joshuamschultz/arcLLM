@@ -1,5 +1,6 @@
 """Tests for FallbackModule — provider chain on failure."""
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -167,3 +168,95 @@ class TestFallbackValidation:
         config = {"chain": [f"provider_{i}" for i in range(10)]}
         module = FallbackModule(config, inner)
         assert len(module._chain) == 10
+
+
+# ---------------------------------------------------------------------------
+# TestFallbackCleanup
+# ---------------------------------------------------------------------------
+
+
+class TestFallbackCleanup:
+    @patch("arcllm.modules.fallback.load_model")
+    async def test_fallback_adapter_closed_after_success(
+        self, mock_load_model, messages
+    ):
+        inner = _make_inner([_api_error(500)])
+        fallback_inner = _make_inner([_FALLBACK_RESPONSE])
+        fallback_inner.close = AsyncMock()
+        mock_load_model.return_value = fallback_inner
+
+        config = {"chain": ["openai"]}
+        module = FallbackModule(config, inner)
+        await module.invoke(messages)
+
+        fallback_inner.close.assert_awaited_once()
+
+    @patch("arcllm.modules.fallback.load_model")
+    async def test_fallback_adapter_closed_after_failure(
+        self, mock_load_model, messages
+    ):
+        inner = _make_inner([_api_error(500)])
+        fallback_inner = _make_inner([_api_error(503)])
+        fallback_inner.close = AsyncMock()
+        mock_load_model.return_value = fallback_inner
+
+        config = {"chain": ["openai"]}
+        module = FallbackModule(config, inner)
+
+        with pytest.raises(ArcLLMAPIError, match="500"):
+            await module.invoke(messages)
+
+        fallback_inner.close.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# TestFallbackLogging
+# ---------------------------------------------------------------------------
+
+
+class TestFallbackLogging:
+    @patch("arcllm.modules.fallback.load_model")
+    async def test_logs_primary_failure(self, mock_load_model, messages, caplog):
+        inner = _make_inner([_api_error(500)])
+        fallback_inner = _make_inner([_FALLBACK_RESPONSE])
+        mock_load_model.return_value = fallback_inner
+
+        config = {"chain": ["openai"]}
+        module = FallbackModule(config, inner)
+        with caplog.at_level(logging.WARNING, logger="arcllm.modules.fallback"):
+            await module.invoke(messages)
+        assert "Primary provider failed" in caplog.text
+        assert "1 fallback" in caplog.text
+
+    @patch("arcllm.modules.fallback.load_model")
+    async def test_logs_fallback_success(self, mock_load_model, messages, caplog):
+        inner = _make_inner([_api_error(500)])
+        fallback_inner = _make_inner([_FALLBACK_RESPONSE])
+        mock_load_model.return_value = fallback_inner
+
+        config = {"chain": ["openai"]}
+        module = FallbackModule(config, inner)
+        with caplog.at_level(logging.INFO, logger="arcllm.modules.fallback"):
+            await module.invoke(messages)
+        assert "Fallback to 'openai' succeeded" in caplog.text
+
+    @patch("arcllm.modules.fallback.load_model")
+    async def test_logs_all_fallbacks_exhausted(self, mock_load_model, messages, caplog):
+        inner = _make_inner([_api_error(500)])
+        fallback_inner = _make_inner([_api_error(503)])
+        mock_load_model.return_value = fallback_inner
+
+        config = {"chain": ["openai"]}
+        module = FallbackModule(config, inner)
+        with caplog.at_level(logging.ERROR, logger="arcllm.modules.fallback"):
+            with pytest.raises(ArcLLMAPIError):
+                await module.invoke(messages)
+        assert "All 1 fallbacks exhausted" in caplog.text
+
+    async def test_no_log_on_primary_success(self, messages, caplog):
+        inner = _make_inner([_OK_RESPONSE])
+        config = {"chain": ["openai"]}
+        module = FallbackModule(config, inner)
+        with caplog.at_level(logging.WARNING, logger="arcllm.modules.fallback"):
+            await module.invoke(messages)
+        assert caplog.text == ""

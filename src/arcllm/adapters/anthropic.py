@@ -200,6 +200,7 @@ class AnthropicAdapter(BaseAdapter):
                 status_code=response.status_code,
                 body=response.text,
                 provider=self.name,
+                retry_after=self._parse_retry_after(response),
             )
 
         return self._parse_response(response.json())

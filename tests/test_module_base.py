@@ -1,6 +1,6 @@
 """Tests for BaseModule — transparent wrapper foundation."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
@@ -79,3 +79,17 @@ class TestBaseModuleInterface:
 
     def test_stores_inner(self, base_module, mock_inner):
         assert base_module._inner is mock_inner
+
+
+class TestBaseModuleClose:
+    async def test_close_delegates_to_inner(self, mock_inner):
+        mock_inner.close = AsyncMock()
+        module = BaseModule(config={}, inner=mock_inner)
+        await module.close()
+        mock_inner.close.assert_awaited_once()
+
+    async def test_close_skips_if_inner_has_no_close(self, mock_inner):
+        # MagicMock(spec=LLMProvider) won't have close by default
+        module = BaseModule(config={}, inner=mock_inner)
+        # Should not raise
+        await module.close()

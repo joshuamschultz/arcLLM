@@ -36,10 +36,17 @@ class ArcLLMAPIError(ArcLLMError):
     leaking verbose provider error details into logs.
     """
 
-    def __init__(self, status_code: int, body: str, provider: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        body: str,
+        provider: str,
+        retry_after: float | None = None,
+    ) -> None:
         self.status_code = status_code
         self.body = body
         self.provider = provider
+        self.retry_after = retry_after
         display_body = (
             body[:_MAX_ERROR_BODY_DISPLAY] + "..."
             if len(body) > _MAX_ERROR_BODY_DISPLAY

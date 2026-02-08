@@ -703,3 +703,94 @@ class TestOpenAIEdgeCases:
         assert msg["role"] == "assistant"
         assert msg["content"] == "Let me search."
         assert len(msg["tool_calls"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# TestOpenAIImageBlock
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAIImageBlock:
+    def test_image_block_formatted_as_image_url(self):
+        from arcllm.adapters.openai import OpenaiAdapter
+        from arcllm.types import ImageBlock
+
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
+        messages = [
+            Message(
+                role="user",
+                content=[
+                    ImageBlock(source="base64data", media_type="image/png"),
+                ],
+            ),
+        ]
+        body = adapter._build_request_body(messages)
+        msg = body["messages"][0]
+        assert msg["role"] == "user"
+        assert isinstance(msg["content"], list)
+        assert len(msg["content"]) == 1
+        assert msg["content"][0]["type"] == "image_url"
+        assert msg["content"][0]["image_url"]["url"] == "data:image/png;base64,base64data"
+
+    def test_mixed_text_and_image_blocks(self):
+        from arcllm.adapters.openai import OpenaiAdapter
+        from arcllm.types import ImageBlock
+
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
+        messages = [
+            Message(
+                role="user",
+                content=[
+                    TextBlock(text="What is in this image?"),
+                    ImageBlock(source="base64data", media_type="image/jpeg"),
+                ],
+            ),
+        ]
+        body = adapter._build_request_body(messages)
+        msg = body["messages"][0]
+        assert isinstance(msg["content"], list)
+        assert len(msg["content"]) == 2
+        assert msg["content"][0] == {"type": "text", "text": "What is in this image?"}
+        assert msg["content"][1]["type"] == "image_url"
+
+
+# ---------------------------------------------------------------------------
+# TestOpenAIRetryAfter
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAIRetryAfter:
+    @pytest.mark.asyncio
+    async def test_retry_after_header_passed_to_error(self):
+        from arcllm.adapters.openai import OpenaiAdapter
+
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
+        mock_response = httpx.Response(
+            429,
+            text="rate limited",
+            headers={"retry-after": "5"},
+            request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
+        )
+        adapter._client = AsyncMock()
+        adapter._client.post = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(ArcLLMAPIError) as exc_info:
+            await adapter.invoke([Message(role="user", content="Hi")])
+        assert exc_info.value.retry_after == 5.0
+
+    @pytest.mark.asyncio
+    async def test_no_retry_after_header(self):
+        from arcllm.adapters.openai import OpenaiAdapter
+
+        adapter = OpenaiAdapter(FAKE_CONFIG, FAKE_MODEL)
+        mock_response = httpx.Response(
+            500,
+            text="server error",
+            request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
+        )
+        adapter._client = AsyncMock()
+        adapter._client.post = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(ArcLLMAPIError) as exc_info:
+            await adapter.invoke([Message(role="user", content="Hi")])
+        assert exc_info.value.retry_after is None

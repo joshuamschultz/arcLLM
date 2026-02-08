@@ -1,6 +1,7 @@
 """RetryModule — exponential backoff with jitter on transient failures."""
 
 import asyncio
+import logging
 import random
 from typing import Any
 
@@ -9,6 +10,8 @@ import httpx
 from arcllm.exceptions import ArcLLMAPIError, ArcLLMConfigError
 from arcllm.modules.base import BaseModule
 from arcllm.types import LLMProvider, LLMResponse, Message, Tool
+
+logger = logging.getLogger(__name__)
 
 # Default retryable HTTP status codes.
 _DEFAULT_RETRYABLE_CODES = [429, 500, 502, 503, 529]
@@ -60,9 +63,17 @@ class RetryModule(BaseModule):
                     raise
                 last_error = e
                 if attempt < self._max_retries:
-                    wait = self._calculate_wait(attempt)
+                    wait = self._calculate_wait(attempt, e)
+                    logger.warning(
+                        "Retry attempt %d/%d after %.2fs: %s",
+                        attempt + 1,
+                        self._max_retries,
+                        wait,
+                        e,
+                    )
                     await asyncio.sleep(wait)
 
+        logger.error("All %d retries exhausted: %s", self._max_retries, last_error)
         raise last_error  # type: ignore[misc]
 
     def _is_retryable(self, error: Exception) -> bool:
@@ -73,8 +84,15 @@ class RetryModule(BaseModule):
             return True
         return False
 
-    def _calculate_wait(self, attempt: int) -> float:
-        """Calculate wait time with exponential backoff + proportional jitter."""
+    def _calculate_wait(self, attempt: int, error: Exception | None = None) -> float:
+        """Calculate wait time with exponential backoff + proportional jitter.
+
+        Honors Retry-After header from ArcLLMAPIError when present,
+        capped at max_wait_seconds.
+        """
+        # Honor Retry-After header if present
+        if isinstance(error, ArcLLMAPIError) and error.retry_after is not None:
+            return min(error.retry_after, self._max_wait)
         backoff = self._backoff_base * (2**attempt)
         jitter = random.uniform(0, backoff)
         return min(backoff + jitter, self._max_wait)

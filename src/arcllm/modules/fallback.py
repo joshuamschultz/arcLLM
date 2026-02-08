@@ -1,10 +1,13 @@
 """FallbackModule — provider chain switching on failure."""
 
+import logging
 from typing import Any
 
 from arcllm.exceptions import ArcLLMConfigError
 from arcllm.modules.base import BaseModule
 from arcllm.types import LLMProvider, LLMResponse, Message, Tool
+
+logger = logging.getLogger(__name__)
 
 _MAX_FALLBACK_CHAIN_LENGTH = 10
 
@@ -46,10 +49,27 @@ class FallbackModule(BaseModule):
         try:
             return await self._inner.invoke(messages, tools, **kwargs)
         except Exception as primary_error:
+            logger.warning(
+                "Primary provider failed: %s. Trying %d fallback(s).",
+                primary_error,
+                len(self._chain),
+            )
             for provider_name in self._chain:
+                fallback = None
                 try:
                     fallback = load_model(provider_name)
-                    return await fallback.invoke(messages, tools, **kwargs)
-                except Exception:
+                    result = await fallback.invoke(messages, tools, **kwargs)
+                    logger.info("Fallback to '%s' succeeded.", provider_name)
+                    return result
+                except Exception as fallback_error:
+                    logger.warning(
+                        "Fallback '%s' failed: %s", provider_name, fallback_error
+                    )
                     continue
+                finally:
+                    if fallback is not None and hasattr(fallback, "close"):
+                        await fallback.close()
+            logger.error(
+                "All %d fallbacks exhausted. Raising primary error.", len(self._chain)
+            )
             raise primary_error

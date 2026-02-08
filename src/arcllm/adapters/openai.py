@@ -6,6 +6,7 @@ from typing import Any
 from arcllm.adapters.base import BaseAdapter
 from arcllm.exceptions import ArcLLMAPIError
 from arcllm.types import (
+    ImageBlock,
     LLMResponse,
     Message,
     StopReason,
@@ -78,9 +79,21 @@ class OpenaiAdapter(BaseAdapter):
                 "tool_calls": formatted_tool_calls,
             }
 
-        # Plain content blocks (text only)
-        text_parts = [b.text for b in message.content if isinstance(b, TextBlock)]
-        return {"role": message.role, "content": " ".join(text_parts) if text_parts else ""}
+        # Plain content blocks (text and images)
+        parts: list[dict[str, Any]] = []
+        for b in message.content:
+            if isinstance(b, TextBlock):
+                parts.append({"type": "text", "text": b.text})
+            elif isinstance(b, ImageBlock):
+                parts.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{b.media_type};base64,{b.source}",
+                    },
+                })
+        if parts:
+            return {"role": message.role, "content": parts}
+        return {"role": message.role, "content": ""}
 
     def _format_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Format all messages with tool result flattening.
@@ -194,6 +207,7 @@ class OpenaiAdapter(BaseAdapter):
                 status_code=response.status_code,
                 body=response.text,
                 provider=self.name,
+                retry_after=self._parse_retry_after(response),
             )
 
         return self._parse_response(response.json())
