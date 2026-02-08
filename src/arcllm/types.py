@@ -115,7 +115,7 @@ class LLMProvider(ABC):
     name: str
 
     @abstractmethod
-    async def complete(
+    async def invoke(
         self,
         messages: list[Message],
         tools: list[Tool] | None = None,

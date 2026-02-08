@@ -10,12 +10,12 @@ ArcLLM is a minimal, security-first unified LLM abstraction layer for autonomous
 
 ## Teaching Mode (CRITICAL)
 
-This project follows a **guided building process**. The builder (Josh) learns by making every decision and writing every line.
+This project follows a **guided building process**. The spec builder (Josh) learns by making every decision and verifying before any lines are written.
 
 ### Rules
 
 1. **Explain concepts FIRST** (what and why), then give build instructions
-2. **Never dump code for Josh to paste** — give instructions to write code
+2. **Never dump code for Josh to paste** — give instructions to write code 
 3. **At EVERY design decision**: present 2-4 options with tradeoffs, relate to ArcLLM's context (agents, scale, security), reference prior art (LiteLLM, pi-ai), then **ASK and WAIT**
 4. **Verify together** before moving to the next task
 5. **Exception**: If Josh explicitly asks "just write it" or "show me the code", provide code
@@ -50,7 +50,7 @@ These are settled. Reference them but never present as open questions.
 | Async | Async-first with sync wrapper |
 | Config format | TOML (stdlib `tomllib`, zero dependency) |
 | Config structure | Global `config.toml` + one TOML per provider in `providers/` |
-| Model interface | `load_model()` returns stateless model object with `.complete()` |
+| Model interface | `load_model()` returns stateless model object with `.invoke()` |
 | State | Model object holds config/metadata ONLY. No conversation state. Agent manages its own messages. |
 | Provider adapters | One `.py` file per provider in `adapters/`, lazy loaded |
 | API keys | Environment variables only. Never in config files. Vault integration later (Step 14). |
@@ -75,6 +75,10 @@ These are settled. Reference them but never present as open questions.
 5. **Provider quirks stay in adapters** — core types are clean and universal
 6. **Config-driven** — model metadata, settings, module toggles in TOML, not code
 7. **Opt-in complexity** — one provider + no modules loads only what's needed
+8. **future proof** - modular so we can easily update and add as the industry progresses
+9. **Maintainability** - the goal is easy to maintain and update as apis and needs change, and as technology progresses.
+10. **Abstracted** - use abstracted classes and files when it makes sense like common use, repeated use, etc
+
 
 ### Layered Architecture
 
@@ -95,14 +99,14 @@ Config Layer (config.py, *.toml)       -- settings, metadata, toggles
 ### Data Flow: Agentic Tool-Calling Loop
 
 ```
-Agent builds messages -> model.complete(messages, tools)
+Agent builds messages -> model.invoke(messages, tools)
 -> Adapter translates to provider API format
 -> httpx sends request
 -> Provider responds
 -> Adapter parses to LLMResponse (content, tool_calls, usage, stop_reason)
 -> Agent checks stop_reason:
    "end_turn" -> done, use content
-   "tool_use" -> execute tools, pack ToolResultBlock, call complete() again
+   "tool_use" -> execute tools, pack ToolResultBlock, call invoke() again
 ```
 
 ---
@@ -160,7 +164,7 @@ arcllm/
 | `ToolCall` | id, name, arguments (dict, always parsed) |
 | `Usage` | input/output/total tokens + optional cache/reasoning tokens |
 | `LLMResponse` | content, tool_calls, usage, model, stop_reason, thinking, raw |
-| `LLMProvider` | Abstract base: name, complete(), validate_config() |
+| `LLMProvider` | Abstract base: name, invoke(), validate_config() |
 
 ### Exception Hierarchy
 

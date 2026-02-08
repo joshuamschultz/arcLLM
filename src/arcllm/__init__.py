@@ -1,5 +1,7 @@
 """ArcLLM — Unified LLM abstraction layer for autonomous agents."""
 
+from arcllm.adapters.anthropic import AnthropicAdapter
+from arcllm.adapters.base import BaseAdapter
 from arcllm.config import (
     DefaultsConfig,
     GlobalConfig,
@@ -10,7 +12,12 @@ from arcllm.config import (
     load_global_config,
     load_provider_config,
 )
-from arcllm.exceptions import ArcLLMConfigError, ArcLLMError, ArcLLMParseError
+from arcllm.exceptions import (
+    ArcLLMAPIError,
+    ArcLLMConfigError,
+    ArcLLMError,
+    ArcLLMParseError,
+)
 from arcllm.types import (
     ContentBlock,
     ImageBlock,
@@ -26,6 +33,9 @@ from arcllm.types import (
 )
 
 __all__ = [
+    # Adapters
+    "AnthropicAdapter",
+    "BaseAdapter",
     # Config types
     "DefaultsConfig",
     "GlobalConfig",
@@ -49,6 +59,7 @@ __all__ = [
     "ToolUseBlock",
     "Usage",
     # Exceptions
+    "ArcLLMAPIError",
     "ArcLLMConfigError",
     "ArcLLMError",
     "ArcLLMParseError",

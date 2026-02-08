@@ -35,10 +35,10 @@ model = load_model("anthropic", "claude-sonnet-4-20250514")
 model = load_model("anthropic", telemetry=True, audit=True)
 
 # Use in agentic loop — stateless per call
-response = await model.complete(messages, tools=my_tools)
+response = await model.invoke(messages, tools=my_tools)
 
 # Sync wrapper available
-response = model.complete_sync(messages, tools=my_tools)
+response = model.invoke_sync(messages, tools=my_tools)
 ```
 
 ---
@@ -223,7 +223,7 @@ Four variants, discriminated on `type` field:
 | Member | Type | Notes |
 |--------|------|-------|
 | name | str | Provider identifier |
-| complete() | async method → LLMResponse | Send messages, get normalized response |
+| invoke() | async method → LLMResponse | Send messages, get normalized response |
 | validate_config() | method → bool | Check config validity (API key exists, URL reachable, etc.) |
 
 ### Exceptions

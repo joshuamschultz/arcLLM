@@ -27,4 +27,6 @@ build/
 .pytest_cache/
 
 # Claude 
-.claude/
+.claude/commands/*
+.claude/skills/*
+CLAUDE.md

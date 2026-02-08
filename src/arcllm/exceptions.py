@@ -22,3 +22,17 @@ class ArcLLMParseError(ArcLLMError):
 
 class ArcLLMConfigError(ArcLLMError):
     """Raised on configuration validation failure."""
+
+
+class ArcLLMAPIError(ArcLLMError):
+    """Raised when a provider API returns an HTTP error.
+
+    Carries status_code, body, and provider so agents and the retry
+    module can make smart decisions (e.g., 429 → retry, 401 → don't).
+    """
+
+    def __init__(self, status_code: int, body: str, provider: str) -> None:
+        self.status_code = status_code
+        self.body = body
+        self.provider = provider
+        super().__init__(f"{provider} API error (HTTP {status_code}): {body}")

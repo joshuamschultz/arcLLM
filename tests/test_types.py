@@ -198,7 +198,7 @@ def test_llmprovider_concrete_subclass():
     class FakeProvider(LLMProvider):
         name = "fake"
 
-        async def complete(self, messages, tools=None, **kwargs):
+        async def invoke(self, messages, tools=None, **kwargs):
             return LLMResponse(
                 content="hello",
                 usage=Usage(input_tokens=1, output_tokens=1, total_tokens=2),
