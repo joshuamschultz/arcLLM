@@ -24,15 +24,25 @@ class ArcLLMConfigError(ArcLLMError):
     """Raised on configuration validation failure."""
 
 
+_MAX_ERROR_BODY_DISPLAY = 500
+
+
 class ArcLLMAPIError(ArcLLMError):
     """Raised when a provider API returns an HTTP error.
 
     Carries status_code, body, and provider so agents and the retry
     module can make smart decisions (e.g., 429 → retry, 401 → don't).
+    The full body is on the attribute; __str__ truncates to prevent
+    leaking verbose provider error details into logs.
     """
 
     def __init__(self, status_code: int, body: str, provider: str) -> None:
         self.status_code = status_code
         self.body = body
         self.provider = provider
-        super().__init__(f"{provider} API error (HTTP {status_code}): {body}")
+        display_body = (
+            body[:_MAX_ERROR_BODY_DISPLAY] + "..."
+            if len(body) > _MAX_ERROR_BODY_DISPLAY
+            else body
+        )
+        super().__init__(f"{provider} API error (HTTP {status_code}): {display_body}")

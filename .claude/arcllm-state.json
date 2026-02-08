@@ -78,6 +78,24 @@
         "T4.4 Test search tool loop (canned results)",
         "T4.5 Test multi-tool with agentic loop helper"
       ]
+    },
+    "5": {
+      "status": "complete",
+      "spec_id": "005",
+      "tasks": [
+        "T5.1 Add StopReason type to types.py",
+        "T5.2 Write test_openai.py (TDD RED)",
+        "T5.3 Create OpenAIAdapter in adapters/openai.py",
+        "T5.4 Update __init__.py with new exports",
+        "T5.5 Full test suite verification"
+      ],
+      "completed_tasks": [
+        "T5.1 Add StopReason type to types.py",
+        "T5.2 Write test_openai.py (TDD RED)",
+        "T5.3 Create OpenAIAdapter in adapters/openai.py",
+        "T5.4 Update __init__.py with new exports",
+        "T5.5 Full test suite verification"
+      ]
     }
   },
   "decisions": {
@@ -110,6 +128,24 @@
       "reason": "Path traversal prevention — NIST 800-53 AC-3, OWASP A01 compliance for federal production",
       "date": "2026-02-07",
       "alternatives_considered": ["no validation", "path resolution check", "allowlist"]
+    },
+    "D-038_stop_reason_normalization": {
+      "decision": "Canonical StopReason Literal type — adapters map provider-native values to end_turn/tool_use/max_tokens/stop_sequence",
+      "reason": "Unified interface requires provider-agnostic stop checks; Literal catches typos at validation time",
+      "date": "2026-02-07",
+      "alternatives_considered": ["pass through provider-native values", "dual field (normalized + raw)"]
+    },
+    "D-039_tool_result_flattening": {
+      "decision": "OpenAI adapter flattens one ArcLLM message with N ToolResultBlocks into N separate OpenAI messages",
+      "reason": "Agents use same ToolResultBlock pattern regardless of provider; adapter owns translation complexity",
+      "date": "2026-02-07",
+      "alternatives_considered": ["require agents to use different message format per provider"]
+    },
+    "D-040_mirror_adapter_structure": {
+      "decision": "OpenAI adapter mirrors Anthropic adapter's private-method-per-concern pattern",
+      "reason": "Proven in Step 3; consistency across adapters for maintainability and learnability",
+      "date": "2026-02-07",
+      "alternatives_considered": ["different structure optimized for OpenAI's simpler API"]
     }
   },
   "notes": [
@@ -120,7 +156,7 @@
     "BaseAdapter: concrete base with httpx client, API key resolution, async context manager",
     "AnthropicAdapter: full request/response translation, all 4 content block types, tool call parsing",
     "Mocking: AsyncMock + httpx.Response (not MockTransport) — cleaner for unit testing",
-    "Decision log at .claude/decision-log.md (D-001 through D-035)",
+    "Decision log at .claude/decision-log.md (D-001 through D-040)",
     "Next step: Step 4 — Test harness — agentic loop",
     "Step 4 complete — Jupyter notebook + script for live API testing",
     "4 tests: simple text, calculator loop, search loop, multi-tool loop",
@@ -128,7 +164,10 @@
     "Decision: notebook approach (not pytest mocks) since goal is validating unified interface with real API",
     "Decision: both calculator and web_search tools for testing",
     "Files: walkthrough/step_04_agentic_loop.ipynb + walkthrough/run_step_04.py",
-    "Next step: Step 5 — OpenAI adapter"
+    "Next step: Step 5 — OpenAI adapter",
+    "Step 5 spec created at .claude/specs/005-openai-adapter/ (PRD, SDD, PLAN, README)",
+    "Step 5 decisions: D-038 StopReason normalization, D-039 tool result flattening, D-040 mirror adapter structure",
+    "Step 5 has 5 tasks: T5.1 StopReason type, T5.2 test_openai.py (TDD), T5.3 OpenAI adapter, T5.4 exports, T5.5 verification"
   ],
   "meta": {
     "last_updated": "2026-02-07",

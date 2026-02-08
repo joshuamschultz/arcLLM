@@ -256,3 +256,29 @@ def test_usage_zero_tokens():
     usage = Usage(input_tokens=0, output_tokens=0, total_tokens=0)
     assert usage.input_tokens == 0
     assert usage.total_tokens == 0
+
+
+# --- StopReason normalization ---
+
+
+def test_stop_reason_valid_values():
+    """All five canonical stop reasons are accepted by LLMResponse."""
+    usage = Usage(input_tokens=10, output_tokens=5, total_tokens=15)
+    for reason in ["end_turn", "tool_use", "max_tokens", "stop_sequence", "content_filter"]:
+        resp = LLMResponse(
+            usage=usage,
+            model="test-model",
+            stop_reason=reason,
+        )
+        assert resp.stop_reason == reason
+
+
+def test_stop_reason_invalid_value():
+    """Invalid stop reason strings are rejected by pydantic validation."""
+    usage = Usage(input_tokens=10, output_tokens=5, total_tokens=15)
+    with pytest.raises(ValidationError):
+        LLMResponse(
+            usage=usage,
+            model="test-model",
+            stop_reason="stop",  # OpenAI-native value, should be rejected
+        )

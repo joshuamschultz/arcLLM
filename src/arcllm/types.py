@@ -92,6 +92,15 @@ class Usage(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Stop reason (normalized across providers)
+# ---------------------------------------------------------------------------
+
+StopReason = Literal[
+    "end_turn", "tool_use", "max_tokens", "stop_sequence", "content_filter"
+]
+
+
+# ---------------------------------------------------------------------------
 # LLM response (normalized across providers)
 # ---------------------------------------------------------------------------
 
@@ -101,9 +110,9 @@ class LLMResponse(BaseModel):
     tool_calls: list[ToolCall] = []
     usage: Usage
     model: str
-    stop_reason: str
+    stop_reason: StopReason
     thinking: str | None = None
-    raw: Any = None
+    raw: Any = Field(default=None, repr=False, exclude=True)
 
 
 # ---------------------------------------------------------------------------

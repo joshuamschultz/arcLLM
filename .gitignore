@@ -30,3 +30,6 @@ build/
 .claude/commands/*
 .claude/skills/*
 CLAUDE.md
+
+# Work files
+architecture/

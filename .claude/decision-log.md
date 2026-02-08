@@ -495,3 +495,45 @@ Key findings from research:
 **Rationale**: Both tools exercise different content patterns (numeric vs string results) and together test the multi-tool selection capability. The multi-tool test validates the LLM correctly picks which tool to use when multiple are available.
 
 ---
+
+## D-038: StopReason Normalization
+
+**Decision**: Define `StopReason = Literal["end_turn", "tool_use", "max_tokens", "stop_sequence"]` as canonical stop reasons. Each adapter maps provider-native values to these.
+
+**Alternatives considered**:
+- Pass through provider-native values — each adapter returns whatever the provider sends. Simple but agents must know which provider they're using, defeating the abstraction.
+- Dual field (normalized + raw) — normalize to canonical set AND store original provider value in `raw_stop_reason`. Best of both worlds but over-engineering since `LLMResponse.raw` already contains the original.
+
+**Rationale**: The whole point of ArcLLM is a unified interface. If an agent checks `stop_reason == "tool_use"` after an Anthropic call, that same check must work after an OpenAI call. Anthropic's values are clean and descriptive — adopt them as canonical. Using a `Literal` type catches typos at pydantic validation time, not at runtime during a live agent loop.
+
+**Mapping**:
+| OpenAI `finish_reason` | ArcLLM `StopReason` |
+|------------------------|---------------------|
+| `"stop"` | `"end_turn"` |
+| `"tool_calls"` | `"tool_use"` |
+| `"length"` | `"max_tokens"` |
+| `"content_filter"` | `"end_turn"` |
+
+---
+
+## D-039: Tool Result Message Flattening (OpenAI)
+
+**Decision**: The OpenAI adapter's `_format_messages()` method handles one-to-many expansion transparently. A single ArcLLM message with N `ToolResultBlock`s becomes N separate OpenAI messages, each with `role: "tool"` and `tool_call_id` at the message level.
+
+**Alternatives considered**:
+- Require agents to use different message format per provider — would defeat the unified abstraction entirely.
+
+**Rationale**: Agents use the same `ToolResultBlock` message-building pattern regardless of provider. The adapter owns the translation complexity. One ArcLLM message with 3 tool results -> 3 OpenAI messages. This is invisible to the agent.
+
+---
+
+## D-040: Mirror Anthropic Adapter Structure for OpenAI
+
+**Decision**: OpenAI adapter uses the same private-method-per-concern pattern as the Anthropic adapter: `_build_headers()`, `_build_request_body()`, `_format_message()`, `_format_tool()`, `_parse_response()`, `_parse_tool_call()`, `_parse_usage()`. Plus OpenAI-specific `_map_stop_reason()`.
+
+**Alternatives considered**:
+- Different structure optimized for OpenAI's simpler API — but consistency is more important than micro-optimization.
+
+**Rationale**: Proven in Step 3. Each method independently testable. When OpenAI changes their API, update one method. Consistent structure across adapters makes the codebase easier to maintain and learn. A developer who understands the Anthropic adapter instantly understands the OpenAI adapter.
+
+---

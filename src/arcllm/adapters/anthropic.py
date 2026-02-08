@@ -1,14 +1,14 @@
 """Anthropic Messages API adapter."""
 
-import json
 from typing import Any
 
 from arcllm.adapters.base import BaseAdapter
-from arcllm.exceptions import ArcLLMAPIError, ArcLLMParseError
+from arcllm.exceptions import ArcLLMAPIError
 from arcllm.types import (
     ImageBlock,
     LLMResponse,
     Message,
+    StopReason,
     TextBlock,
     Tool,
     ToolCall,
@@ -18,6 +18,14 @@ from arcllm.types import (
 )
 
 ANTHROPIC_API_VERSION = "2023-06-01"
+
+# Anthropic stop_reason -> ArcLLM StopReason
+_ANTHROPIC_STOP_REASON_MAP: dict[str, StopReason] = {
+    "end_turn": "end_turn",
+    "tool_use": "tool_use",
+    "max_tokens": "max_tokens",
+    "stop_sequence": "stop_sequence",
+}
 
 
 class AnthropicAdapter(BaseAdapter):
@@ -112,14 +120,7 @@ class AnthropicAdapter(BaseAdapter):
         system_text, remaining = self._extract_system(messages)
         formatted = [self._format_message(m) for m in remaining]
 
-        # Resolve defaults from config, overridable by kwargs
-        max_tokens = kwargs.get(
-            "max_tokens",
-            self._model_meta.max_output_tokens if self._model_meta else 4096,
-        )
-        temperature = kwargs.get(
-            "temperature", self._config.provider.default_temperature
-        )
+        max_tokens, temperature = self._resolve_defaults(**kwargs)
 
         body: dict[str, Any] = {
             "model": self._model_name,
@@ -135,20 +136,11 @@ class AnthropicAdapter(BaseAdapter):
 
     # -- Response parsing -----------------------------------------------------
 
+    def _map_stop_reason(self, raw_reason: str) -> StopReason:
+        return _ANTHROPIC_STOP_REASON_MAP.get(raw_reason, "end_turn")
+
     def _parse_tool_call(self, block: dict[str, Any]) -> ToolCall:
-        raw_input = block["input"]
-        if isinstance(raw_input, dict):
-            arguments = raw_input
-        elif isinstance(raw_input, str):
-            try:
-                arguments = json.loads(raw_input)
-            except json.JSONDecodeError as e:
-                raise ArcLLMParseError(raw_string=raw_input, original_error=e)
-        else:
-            raise ArcLLMParseError(
-                raw_string=str(raw_input),
-                original_error=TypeError(f"Unexpected input type: {type(raw_input)}"),
-            )
+        arguments = self._parse_arguments(block["input"])
         return ToolCall(id=block["id"], name=block["name"], arguments=arguments)
 
     def _parse_usage(self, usage_data: dict[str, Any]) -> Usage:
@@ -184,7 +176,7 @@ class AnthropicAdapter(BaseAdapter):
             tool_calls=tool_calls,
             usage=self._parse_usage(data["usage"]),
             model=data["model"],
-            stop_reason=data["stop_reason"],
+            stop_reason=self._map_stop_reason(data["stop_reason"]),
             thinking=thinking,
             raw=data,
         )

@@ -7,8 +7,12 @@ the Anthropic adapter in a complete agentic tool-calling loop.
 import asyncio
 import os
 
-# Verify API key is available
-assert os.environ.get("ANTHROPIC_API_KEY"), "Set ANTHROPIC_API_KEY env var first!"
+import pytest
+
+# Skip entire module if no API key — prevents collection crash in CI
+if not os.environ.get("ANTHROPIC_API_KEY"):
+    pytest.skip("ANTHROPIC_API_KEY not set — skipping live API tests", allow_module_level=True)
+
 print("API key found.")
 
 from arcllm import (

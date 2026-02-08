@@ -1,13 +1,16 @@
 """Base adapter — shared plumbing for all provider adapters."""
 
+import json
 import os
 from typing import Any
 
 import httpx
 
 from arcllm.config import ModelMetadata, ProviderConfig
-from arcllm.exceptions import ArcLLMConfigError
+from arcllm.exceptions import ArcLLMConfigError, ArcLLMParseError
 from arcllm.types import LLMProvider, LLMResponse, Message, Tool
+
+DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
 class BaseAdapter(LLMProvider):
@@ -44,6 +47,36 @@ class BaseAdapter(LLMProvider):
         **kwargs: Any,
     ) -> LLMResponse:
         raise NotImplementedError
+
+    def _parse_arguments(self, raw: Any) -> dict[str, Any]:
+        """Parse tool call arguments from provider response.
+
+        Handles dict (pass-through), str (JSON parse), or raises ArcLLMParseError.
+        """
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise ArcLLMParseError(raw_string=raw, original_error=e)
+        raise ArcLLMParseError(
+            raw_string=str(raw),
+            original_error=TypeError(f"Unexpected arguments type: {type(raw)}"),
+        )
+
+    def _resolve_defaults(self, **kwargs: Any) -> tuple[int, float]:
+        """Resolve max_tokens and temperature from kwargs, model meta, or config."""
+        max_tokens = kwargs.get(
+            "max_tokens",
+            self._model_meta.max_output_tokens
+            if self._model_meta
+            else DEFAULT_MAX_OUTPUT_TOKENS,
+        )
+        temperature = kwargs.get(
+            "temperature", self._config.provider.default_temperature
+        )
+        return max_tokens, temperature
 
     def validate_config(self) -> bool:
         return bool(self._api_key)

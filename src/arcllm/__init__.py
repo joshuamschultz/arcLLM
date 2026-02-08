@@ -2,6 +2,7 @@
 
 from arcllm.adapters.anthropic import AnthropicAdapter
 from arcllm.adapters.base import BaseAdapter
+from arcllm.adapters.openai import OpenAIAdapter
 from arcllm.config import (
     DefaultsConfig,
     GlobalConfig,
@@ -24,6 +25,7 @@ from arcllm.types import (
     LLMProvider,
     LLMResponse,
     Message,
+    StopReason,
     TextBlock,
     Tool,
     ToolCall,
@@ -36,6 +38,7 @@ __all__ = [
     # Adapters
     "AnthropicAdapter",
     "BaseAdapter",
+    "OpenAIAdapter",
     # Config types
     "DefaultsConfig",
     "GlobalConfig",
@@ -47,6 +50,7 @@ __all__ = [
     "load_global_config",
     "load_provider_config",
     # Types
+    "StopReason",
     "ContentBlock",
     "ImageBlock",
     "LLMProvider",

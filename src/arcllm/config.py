@@ -5,7 +5,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from arcllm.exceptions import ArcLLMConfigError
 
@@ -40,6 +40,19 @@ class ProviderSettings(BaseModel):
     api_key_env: str
     default_model: str
     default_temperature: float
+
+    @field_validator("base_url")
+    @classmethod
+    def _validate_https(cls, v: str) -> str:
+        """Enforce HTTPS for remote hosts. Allow HTTP only for localhost."""
+        if v.startswith("http://") and not any(
+            v.startswith(f"http://{host}")
+            for host in ("localhost", "127.0.0.1", "[::1]")
+        ):
+            raise ValueError(
+                f"base_url must use HTTPS for remote hosts. Got: {v}"
+            )
+        return v
 
 
 class ProviderConfig(BaseModel):

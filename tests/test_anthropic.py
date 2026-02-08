@@ -67,7 +67,7 @@ FAKE_CONFIG = ProviderConfig(
 @pytest.fixture(autouse=True)
 def _set_test_api_key(monkeypatch):
     """Ensure the test API key env var is set for all tests."""
-    monkeypatch.setenv("ARCLLM_TEST_KEY", "sk-test-key-123")
+    monkeypatch.setenv("ARCLLM_TEST_KEY", "test-ant-key-123")
 
 
 def _make_anthropic_text_response(
@@ -141,6 +141,17 @@ class TestArcLLMAPIError:
         assert "401" in msg
         assert "invalid key" in msg
 
+    def test_api_error_body_truncation(self):
+        long_body = "x" * 1000
+        err = ArcLLMAPIError(status_code=500, body=long_body, provider="anthropic")
+        # Full body available on attribute
+        assert err.body == long_body
+        assert len(err.body) == 1000
+        # __str__ truncates for log safety
+        msg = str(err)
+        assert len(msg) < 600  # truncated at 500 + prefix
+        assert msg.endswith("...")
+
 
 # ---------------------------------------------------------------------------
 # T3.2: BaseAdapter
@@ -155,7 +166,7 @@ class TestBaseAdapter:
 
     def test_base_adapter_resolves_api_key(self):
         adapter = BaseAdapter(FAKE_CONFIG, FAKE_MODEL)
-        assert adapter._api_key == "sk-test-key-123"
+        assert adapter._api_key == "test-ant-key-123"
 
     def test_base_adapter_missing_api_key_raises(self, monkeypatch):
         monkeypatch.delenv("ARCLLM_TEST_KEY", raising=False)
@@ -204,7 +215,7 @@ class TestAnthropicHeaders:
 
         adapter = AnthropicAdapter(FAKE_CONFIG, FAKE_MODEL)
         headers = adapter._build_headers()
-        assert headers["x-api-key"] == "sk-test-key-123"
+        assert headers["x-api-key"] == "test-ant-key-123"
         assert headers["anthropic-version"] == "2023-06-01"
         assert headers["content-type"] == "application/json"
 

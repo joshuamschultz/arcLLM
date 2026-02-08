@@ -202,3 +202,50 @@ def test_missing_global_config_raises_config_error(tmp_path):
     with patch("arcllm.config._get_config_dir", return_value=tmp_path):
         with pytest.raises(ArcLLMConfigError, match="not found"):
             load_global_config()
+
+
+# --- HTTPS enforcement on base_url ---
+
+
+def test_https_enforced_for_remote_hosts():
+    with pytest.raises(Exception, match="HTTPS"):
+        ProviderSettings(
+            api_format="test",
+            base_url="http://evil.example.com",
+            api_key_env="TEST_KEY",
+            default_model="m",
+            default_temperature=0.7,
+        )
+
+
+def test_https_accepted():
+    settings = ProviderSettings(
+        api_format="test",
+        base_url="https://api.example.com",
+        api_key_env="TEST_KEY",
+        default_model="m",
+        default_temperature=0.7,
+    )
+    assert settings.base_url == "https://api.example.com"
+
+
+def test_http_localhost_allowed():
+    settings = ProviderSettings(
+        api_format="test",
+        base_url="http://localhost:8080",
+        api_key_env="TEST_KEY",
+        default_model="m",
+        default_temperature=0.7,
+    )
+    assert settings.base_url == "http://localhost:8080"
+
+
+def test_http_127_allowed():
+    settings = ProviderSettings(
+        api_format="test",
+        base_url="http://127.0.0.1:11434",
+        api_key_env="TEST_KEY",
+        default_model="m",
+        default_temperature=0.7,
+    )
+    assert settings.base_url == "http://127.0.0.1:11434"
