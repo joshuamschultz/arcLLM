@@ -111,6 +111,8 @@ def load_model(
     retry: bool | dict[str, Any] | None = None,
     fallback: bool | dict[str, Any] | None = None,
     rate_limit: bool | dict[str, Any] | None = None,
+    telemetry: bool | dict[str, Any] | None = None,
+    audit: bool | dict[str, Any] | None = None,
 ) -> LLMProvider:
     """Load a configured model object for the given provider.
 
@@ -130,7 +132,7 @@ def load_model(
         - ``dict``: enable with custom settings (merged over defaults)
         - ``None`` (default): use config.toml enabled flag
 
-    Stacking order (outermost first): Retry → Fallback → RateLimit → Adapter.
+    Stacking order (outermost first): Telemetry → Audit → Retry → Fallback → RateLimit → Adapter.
 
     Args:
         provider: Provider name (e.g., "anthropic", "openai").
@@ -139,6 +141,9 @@ def load_model(
         retry: RetryModule configuration override.
         fallback: FallbackModule configuration override.
         rate_limit: RateLimitModule configuration override.
+        telemetry: TelemetryModule configuration override. Pricing data is
+            automatically injected from provider model metadata.
+        audit: AuditModule configuration override. PII-safe metadata logging.
 
     Returns:
         A configured LLMProvider instance ready for invoke().
@@ -178,5 +183,32 @@ def load_model(
         from arcllm.modules.retry import RetryModule
 
         result = RetryModule(retry_config, result)
+
+    audit_config = _resolve_module_config("audit", audit)
+    if audit_config is not None:
+        from arcllm.modules.audit import AuditModule
+
+        result = AuditModule(audit_config, result)
+
+    telemetry_config = _resolve_module_config("telemetry", telemetry)
+    if telemetry_config is not None:
+        from arcllm.modules.telemetry import TelemetryModule
+
+        # Inject pricing from provider model metadata
+        model_meta = config.models.get(model_name)
+        if model_meta is not None:
+            telemetry_config.setdefault(
+                "cost_input_per_1m", model_meta.cost_input_per_1m
+            )
+            telemetry_config.setdefault(
+                "cost_output_per_1m", model_meta.cost_output_per_1m
+            )
+            telemetry_config.setdefault(
+                "cost_cache_read_per_1m", model_meta.cost_cache_read_per_1m
+            )
+            telemetry_config.setdefault(
+                "cost_cache_write_per_1m", model_meta.cost_cache_write_per_1m
+            )
+        result = TelemetryModule(telemetry_config, result)
 
     return result

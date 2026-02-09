@@ -819,3 +819,138 @@ Key findings from research:
 **Rationale**: Test isolation requires clearing shared state. `clear_cache()` already exists for config caches; adding `clear_buckets()` there ensures automatic cleanup.
 
 ---
+
+## D-064: Telemetry Output — Structured Logging Only
+
+**Decision**: Structured logging only — no callback, no accumulator.
+
+**Alternatives considered**:
+- Callback function — more flexible but adds functions to `load_model()` config
+- In-memory accumulator — useful for budget but not telemetry's concern
+- Both logging + callback — over-engineered for a first version
+
+**Rationale**: Simple, toggle-able via config. Budget and OTel handle their own concerns. No functions in `load_model()` config keeps the interface clean.
+
+---
+
+## D-065: Telemetry Cost Calculation
+
+**Decision**: Calculate and log `cost_usd` per call from provider pricing metadata.
+
+**Alternatives considered**:
+- Log tokens only, no cost — leaves cost calculation to external tools
+- Separate cost module — more modular but adds another module for a simple formula
+
+**Rationale**: Pricing already in provider TOML. Cost per call is essential for budget tracking and ops visibility. Formula is simple: `(tokens * cost_per_1m) / 1_000_000`.
+
+---
+
+## D-066: Pricing Injection via setdefault()
+
+**Decision**: `load_model()` injects pricing from ProviderConfig model metadata into telemetry config dict via `setdefault()`.
+
+**Alternatives considered**:
+- TelemetryModule reads ProviderConfig directly — creates coupling to config layer
+- Separate pricing config section — duplicates data already in provider TOML
+
+**Rationale**: Pricing lives in provider TOML. TelemetryModule shouldn't know about ProviderConfig. `setdefault()` allows explicit overrides in kwarg dict to win.
+
+---
+
+## D-067: Telemetry Stack Position — Outermost
+
+**Decision**: Telemetry outermost: `Telemetry(Retry(Fallback(RateLimit(adapter))))`.
+
+**Alternatives considered**:
+- Innermost (just adapter time) — misses retry/fallback/rate-limit wait time
+- Between retry and fallback — inconsistent semantics
+
+**Rationale**: Measures total wall-clock including retries, fallback, and rate-limit wait. Most useful operational metric for understanding end-to-end call latency.
+
+---
+
+## D-068: Telemetry Log Level — INFO Default
+
+**Decision**: INFO by default, configurable via `log_level` in config dict.
+
+**Alternatives considered**:
+- DEBUG (too quiet by default) — telemetry should be visible when enabled
+- Fixed INFO (not configurable) — inflexible for noisy environments
+
+**Rationale**: Telemetry should be visible when enabled. Configurable for environments where it creates too much noise.
+
+---
+
+## D-069: Telemetry Log Fields
+
+**Decision**: provider, model, duration_ms, input_tokens, output_tokens, total_tokens, cache_read/write_tokens (conditional), cost_usd, stop_reason.
+
+**Alternatives considered**:
+- Minimal (just timing + cost) — insufficient for debugging
+- Include raw response size — adds complexity, raw is for debugging only
+
+**Rationale**: Complete operational visibility per call. Cache tokens omitted when absent to reduce noise.
+
+---
+
+## D-070: Audit Output — Structured Logging (Shared Helper)
+
+**Decision**: Structured logging using shared `log_structured()` helper from `_logging.py`.
+
+**Alternatives considered**:
+- Manual f-string building (like original telemetry) — inconsistent, more code
+- Separate audit log format — diverges from telemetry pattern
+
+**Rationale**: Consistent with telemetry. Shared helper handles sanitization, None omission, and float formatting automatically. One place to change log format across all modules.
+
+---
+
+## D-071: Audit Log Level — INFO Default
+
+**Decision**: INFO by default, configurable via `log_level`. Same validation pattern as TelemetryModule.
+
+**Alternatives considered**:
+- DEBUG default — audit should be visible by default for compliance
+- CRITICAL — too restrictive
+
+**Rationale**: Audit events should be visible by default. Same validation pattern (set of valid names, `ArcLLMConfigError` on invalid) ensures consistency.
+
+---
+
+## D-072: Audit Fields — Metadata Only
+
+**Decision**: provider, model, message_count, stop_reason, tools_provided (conditional), tool_calls (conditional), content_length.
+
+**Alternatives considered**:
+- Include raw content — PII exposure risk
+- Include timing — telemetry already handles this
+- Include token usage — telemetry already handles this
+
+**Rationale**: Covers all compliance-relevant metadata (NIST 800-53 AU-3) without PII exposure. content_length provides size metric without content.
+
+---
+
+## D-073: PII-Safe Audit by Default
+
+**Decision**: No raw message content or response content logged by default.
+
+**Alternatives considered**:
+- Always log content — unacceptable for classified environments
+- Truncate content — still exposes partial PII
+- Hash content — loses debugging utility
+
+**Rationale**: Federal compliance (NIST 800-53 AU-3): audit trail must exist but must not create new PII exposure vectors. Audit logs may be stored in systems with different classification levels than the data itself.
+
+---
+
+## D-074: Content Opt-In at DEBUG Level
+
+**Decision**: `include_messages` and `include_response` boolean flags. Content logged at DEBUG level (separate from main audit record).
+
+**Alternatives considered**:
+- Log at same level as audit record — no additional safety gate
+- Require both flags to be set — overly restrictive
+
+**Rationale**: Double opt-in: config flag must be True AND DEBUG logging must be enabled. In production, DEBUG is typically disabled. Even if config flag is accidentally left on, content won't appear unless DEBUG is explicitly enabled.
+
+---

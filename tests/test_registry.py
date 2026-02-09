@@ -348,8 +348,8 @@ class TestModuleStacking:
         assert not isinstance(model, RateLimitModule)
         assert isinstance(model, AnthropicAdapter)
 
-    def test_load_model_full_stack_order(self):
-        """Stacking order: Retry(Fallback(RateLimit(adapter)))."""
+    def test_load_model_full_stack_order_without_telemetry(self):
+        """Stacking order without telemetry: Retry(Fallback(RateLimit(adapter)))."""
         from arcllm.adapters.anthropic import AnthropicAdapter
         from arcllm.modules.fallback import FallbackModule
         from arcllm.modules.rate_limit import RateLimitModule
@@ -363,6 +363,137 @@ class TestModuleStacking:
         assert isinstance(model._inner, FallbackModule)
         assert isinstance(model._inner._inner, RateLimitModule)
         assert isinstance(model._inner._inner._inner, AnthropicAdapter)
+
+    def test_load_model_with_telemetry(self):
+        """telemetry=True wraps adapter with TelemetryModule."""
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", telemetry=True)
+        assert isinstance(model, TelemetryModule)
+
+    def test_load_model_telemetry_injects_pricing(self):
+        """TelemetryModule receives cost rates from provider model metadata."""
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", telemetry=True)
+        assert isinstance(model, TelemetryModule)
+        assert model._cost_input == 3.00
+        assert model._cost_output == 15.00
+        assert model._cost_cache_read == 0.30
+        assert model._cost_cache_write == 3.75
+
+    def test_load_model_telemetry_custom_model_pricing(self):
+        """Pricing comes from the specific model requested."""
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", "claude-haiku-4-5-20251001", telemetry=True)
+        assert isinstance(model, TelemetryModule)
+        assert model._cost_input == 0.80
+        assert model._cost_output == 4.00
+
+    def test_load_model_telemetry_dict_overrides_pricing(self):
+        """Explicit cost in kwarg dict overrides model metadata pricing."""
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        model = load_model(
+            "anthropic", telemetry={"cost_input_per_1m": 99.0}
+        )
+        assert isinstance(model, TelemetryModule)
+        # Explicit override wins
+        assert model._cost_input == 99.0
+        # Other costs still injected from metadata
+        assert model._cost_output == 15.00
+
+    def test_load_model_full_stack_with_telemetry(self):
+        """Stacking order: Telemetry(Retry(Fallback(RateLimit(adapter))))."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.modules.fallback import FallbackModule
+        from arcllm.modules.rate_limit import RateLimitModule
+        from arcllm.modules.retry import RetryModule
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        model = load_model(
+            "anthropic",
+            retry=True,
+            fallback=True,
+            rate_limit=True,
+            telemetry=True,
+        )
+        assert isinstance(model, TelemetryModule)
+        assert isinstance(model._inner, RetryModule)
+        assert isinstance(model._inner._inner, FallbackModule)
+        assert isinstance(model._inner._inner._inner, RateLimitModule)
+        assert isinstance(model._inner._inner._inner._inner, AnthropicAdapter)
+
+    def test_load_model_telemetry_false_overrides_config(self):
+        """telemetry=False disables even if config.toml enables it."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"telemetry": ModuleConfig(enabled=True)},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            model = load_model("anthropic", telemetry=False)
+        assert not isinstance(model, TelemetryModule)
+        assert isinstance(model, AnthropicAdapter)
+
+    def test_load_model_with_audit(self):
+        """audit=True wraps adapter with AuditModule."""
+        from arcllm.modules.audit import AuditModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", audit=True)
+        assert isinstance(model, AuditModule)
+
+    def test_load_model_audit_false_overrides_config(self):
+        """audit=False disables even if config.toml enables it."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.audit import AuditModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"audit": ModuleConfig(enabled=True)},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            model = load_model("anthropic", audit=False)
+        assert not isinstance(model, AuditModule)
+        assert isinstance(model, AnthropicAdapter)
+
+    def test_load_model_full_stack_with_audit(self):
+        """Stacking order: Telemetry(Audit(Retry(Fallback(RateLimit(adapter)))))."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.modules.audit import AuditModule
+        from arcllm.modules.fallback import FallbackModule
+        from arcllm.modules.rate_limit import RateLimitModule
+        from arcllm.modules.retry import RetryModule
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        model = load_model(
+            "anthropic",
+            retry=True,
+            fallback=True,
+            rate_limit=True,
+            telemetry=True,
+            audit=True,
+        )
+        assert isinstance(model, TelemetryModule)
+        assert isinstance(model._inner, AuditModule)
+        assert isinstance(model._inner._inner, RetryModule)
+        assert isinstance(model._inner._inner._inner, FallbackModule)
+        assert isinstance(model._inner._inner._inner._inner, RateLimitModule)
+        assert isinstance(model._inner._inner._inner._inner._inner, AnthropicAdapter)
 
     def test_clear_cache_clears_buckets(self):
         """clear_cache() resets rate limit shared state."""

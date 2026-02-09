@@ -1,7 +1,8 @@
 {
-  "current_step": 9,
+  "current_step": 12,
   "current_task": null,
-  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8],
+  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8, 10, 11],
+  "skipped_steps": [9],
   "step_plans": {
     "1": {
       "file": "arcllm-step-01-plan.md",
@@ -159,6 +160,53 @@
         "T8.5 Update registry.py and exports",
         "T8.6 Update config.toml",
         "T8.7 Full test suite verification"
+      ]
+    },
+    "9": {
+      "status": "skipped",
+      "reason": "User deferred router module — can add later"
+    },
+    "10": {
+      "status": "complete",
+      "spec_id": "009",
+      "tasks": [
+        "T10.1 Update config.toml with telemetry log_level",
+        "T10.2 Write test_telemetry.py (TDD RED)",
+        "T10.3 Implement TelemetryModule in modules/telemetry.py",
+        "T10.4 Update registry.py with telemetry kwarg and pricing injection",
+        "T10.5 Update __init__.py and modules/__init__.py exports",
+        "T10.6 Full test suite verification"
+      ],
+      "completed_tasks": [
+        "T10.1 Update config.toml with telemetry log_level",
+        "T10.2 Write test_telemetry.py (TDD RED)",
+        "T10.3 Implement TelemetryModule in modules/telemetry.py",
+        "T10.4 Update registry.py with telemetry kwarg and pricing injection",
+        "T10.5 Update __init__.py and modules/__init__.py exports",
+        "T10.6 Full test suite verification"
+      ]
+    }
+  },
+    "11": {
+      "status": "complete",
+      "spec_id": "010",
+      "tasks": [
+        "T11.1 Verify config.toml audit section",
+        "T11.2 Write test_audit.py (TDD RED)",
+        "T11.3 Implement AuditModule in modules/audit.py",
+        "T11.4 Update registry.py with audit kwarg",
+        "T11.5 Update __init__.py and modules/__init__.py exports",
+        "T11.6 Full test suite verification",
+        "T11.7 Update state and decision log"
+      ],
+      "completed_tasks": [
+        "T11.1 Verify config.toml audit section",
+        "T11.2 Write test_audit.py (TDD RED)",
+        "T11.3 Implement AuditModule in modules/audit.py",
+        "T11.4 Update registry.py with audit kwarg",
+        "T11.5 Update __init__.py and modules/__init__.py exports",
+        "T11.6 Full test suite verification",
+        "T11.7 Update state and decision log"
       ]
     }
   },
@@ -348,6 +396,72 @@
       "reason": "Test isolation requires clearing shared state between tests. Automatic via clear_cache().",
       "date": "2026-02-08",
       "alternatives_considered": ["fixture-only cleanup", "no shared state (per-instance buckets)"]
+    },
+    "D-064_telemetry_output": {
+      "decision": "Structured logging only — no callback, no accumulator",
+      "reason": "Simple, toggle-able via config, no functions in load_model() config. Budget and OTel handle their own concerns.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["callback function", "in-memory accumulator", "both logging + callback"]
+    },
+    "D-065_telemetry_cost": {
+      "decision": "Calculate and log cost_usd per call from provider pricing metadata",
+      "reason": "Pricing already in provider TOML; cost per call is essential for budget tracking and ops visibility",
+      "date": "2026-02-08",
+      "alternatives_considered": ["log tokens only, no cost", "separate cost module"]
+    },
+    "D-066_pricing_injection": {
+      "decision": "load_model() injects pricing from ProviderConfig model metadata into telemetry config dict via setdefault()",
+      "reason": "Pricing lives in provider TOML, TelemetryModule shouldn't know about ProviderConfig. setdefault() allows explicit overrides.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["TelemetryModule reads ProviderConfig directly", "separate pricing config section"]
+    },
+    "D-067_telemetry_stack_order": {
+      "decision": "Telemetry outermost: Telemetry(Retry(Fallback(RateLimit(adapter))))",
+      "reason": "Measures total wall-clock including retries, fallback, and rate-limit wait. Most useful operational metric.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["innermost (just adapter time)", "between retry and fallback"]
+    },
+    "D-068_telemetry_log_level": {
+      "decision": "INFO by default, configurable via log_level in config dict",
+      "reason": "Telemetry should be visible when enabled. Configurable for noisy environments.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["DEBUG (too quiet by default)", "fixed INFO (not configurable)"]
+    },
+    "D-069_telemetry_log_fields": {
+      "decision": "provider, model, duration_ms, input_tokens, output_tokens, total_tokens, cache_read/write_tokens (conditional), cost_usd, stop_reason",
+      "reason": "Complete operational visibility per call. Cache tokens omitted when absent to reduce noise.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["minimal (just timing + cost)", "include raw response size"]
+    },
+    "D-070_audit_output": {
+      "decision": "Structured logging using shared log_structured() helper from _logging.py",
+      "reason": "Consistent with telemetry. Shared helper handles sanitization, None omission, float formatting. One place to change format.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["manual f-string building", "separate audit log format"]
+    },
+    "D-071_audit_log_level": {
+      "decision": "INFO by default, configurable via log_level. Same validation pattern as TelemetryModule.",
+      "reason": "Audit events should be visible by default for compliance.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["DEBUG default", "CRITICAL default"]
+    },
+    "D-072_audit_fields": {
+      "decision": "provider, model, message_count, stop_reason, tools_provided (conditional), tool_calls (conditional), content_length",
+      "reason": "Covers compliance-relevant metadata (NIST 800-53 AU-3) without PII exposure.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["include raw content", "include timing (telemetry concern)", "include token usage (telemetry concern)"]
+    },
+    "D-073_pii_safe_audit": {
+      "decision": "No raw message content or response content logged by default",
+      "reason": "Federal compliance: audit trail must not create new PII exposure vectors.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["always log content", "truncate content", "hash content"]
+    },
+    "D-074_content_opt_in": {
+      "decision": "include_messages and include_response boolean flags, content logged at DEBUG level",
+      "reason": "Double opt-in: config flag + DEBUG enabled. Production typically has DEBUG disabled.",
+      "date": "2026-02-08",
+      "alternatives_considered": ["log at same level as audit record", "require both flags"]
     }
   },
   "notes": [
@@ -367,35 +481,28 @@
     "registry.py: 73 lines — load_model(), clear_cache(), _get_adapter_class()",
     "Module-level config cache — configs loaded once per provider, clear_cache() for testing",
     "Phase 1 (Core Foundation) now COMPLETE — Steps 1-6 all done",
-    "Step 6 review — 6-agent swarm review, CONDITIONAL PASS, 3 fixes applied:",
-    "  Fix 1: Removed **kwargs from load_model() — latent TypeError on adapter construction",
-    "  Fix 2: Tightened provider name regex — hyphens disallowed (invalid Python module names), underscores allowed",
-    "  Fix 3: Lazy adapter imports via __getattr__ — httpx no longer loaded at import arcllm time",
-    "Post-fix: 139 tests passing (138 + 1 new hyphen-rejection test), 1 skipped",
-    "Next: Phase 2 (Module System) — Step 7: Fallback + retry",
+    "Step 6 review — 6-agent swarm review, CONDITIONAL PASS, 3 fixes applied",
     "Step 7 complete — 8/8 tasks, 45 new tests, 194 total tests passing, 98% coverage",
-    "BaseModule: transparent wrapper foundation, delegates all LLMProvider methods to inner",
-    "RetryModule: exponential backoff + jitter, retries 429/500/502/503/529 + connection/timeout errors",
-    "FallbackModule: config-driven provider chain, on-demand load_model(), raises primary error on exhaustion",
-    "Registry integration: load_model() accepts retry= and fallback= kwargs with 4-level config resolution",
-    "Stacking order: Retry(Fallback(adapter)) — retry wraps fallback for full chain coverage",
-    "Circular import: fallback.py uses lazy import wrapper for registry.load_model()",
-    "Global config cached at module level in registry.py with clear_cache() support",
-    "Module classes lazy-loaded via __getattr__ in __init__.py",
-    "Next: Step 8 — Rate limiter module",
-    "Step 7 review (/review 007) — 6-agent swarm, CONDITIONAL PASS, 3 fixes applied:",
-    "  Fix 1 (D-053): Config validation — RetryModule rejects negative max_retries, non-positive backoff/max_wait; FallbackModule rejects chain >10",
-    "  Fix 2 (D-052): Proportional jitter — uniform(0, backoff) not uniform(0, base), scales with retry attempt",
-    "  Fix 3 (D-054): Module settings cache — pre-extract model_dump() into _module_settings_cache, avoids 2x serialization per load_model()",
-    "Post-review: 201 tests passing (194 + 7 new validation tests), 1 skipped",
-    "Step 8 complete — 7/7 tasks, 26 new tests (20 rate_limit + 6 registry), 244 total passing, 1 skipped",
-    "TokenBucket: token bucket algorithm with asyncio.Lock, sleep outside lock for concurrent safety",
-    "RateLimitModule: acquires token before invoke(), WARNING log when throttled",
-    "Per-provider shared buckets via module-level _bucket_registry dict",
-    "Registry: load_model() now accepts rate_limit= kwarg, stacking: Retry(Fallback(RateLimit(adapter)))",
-    "clear_cache() now calls clear_buckets() for rate limit state cleanup",
-    "Test mocking: freeze_then_advance pattern for time.monotonic — prevents refill from consuming tokens during wait check",
-    "Next: Step 9 — Router module"
+    "Step 7 review — 6-agent swarm, CONDITIONAL PASS, 3 fixes applied (D-052, D-053, D-054)",
+    "Step 8 complete — 7/7 tasks, 26 new tests, 244 total passing",
+    "Step 8 review — 6-agent swarm, race condition fix in acquire(), DRY test helper, concurrent test added. 245 total.",
+    "Step 9 SKIPPED — Router module deferred by user, can add later",
+    "Step 10 complete — 6/6 tasks, 21 new telemetry + 7 new registry tests, 272 total passing, 1 skipped",
+    "TelemetryModule: structured logging of timing + tokens + cost per invoke()",
+    "Cost calculation: (tokens * cost_per_1m) / 1_000_000, supports input/output/cache_read/cache_write",
+    "Pricing injection: load_model() reads ModelMetadata costs, merges into telemetry config via setdefault()",
+    "Stacking order: Telemetry(Retry(Fallback(RateLimit(adapter)))) — telemetry outermost for total wall-clock",
+    "Configurable log level (INFO default), conditional cache_read/write_tokens fields",
+    "Validation: negative costs rejected, invalid log levels rejected, missing costs default to 0.0",
+    "Next: Step 11 — Audit trail module",
+    "Step 10 review — 6-agent swarm, all PASS. Created shared _logging.py helper, added strict config validation, 7 new tests. 289 total.",
+    "Step 11 complete — 7/7 tasks, 19 new audit + 3 new registry tests, 311 total passing, 1 skipped",
+    "AuditModule: PII-safe metadata logging using log_structured() helper",
+    "Conditional fields: tools_provided/tool_calls omitted when not applicable (None omission in log_structured)",
+    "Content opt-in: include_messages + include_response flags, logged at DEBUG level (double opt-in)",
+    "Stacking order: Telemetry(Audit(Retry(Fallback(RateLimit(adapter)))))",
+    "Strict config key validation: _VALID_CONFIG_KEYS catches typos at construction",
+    "Next: Step 12 — Budget manager module"
   ],
   "meta": {
     "last_updated": "2026-02-08",
