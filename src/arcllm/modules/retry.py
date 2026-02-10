@@ -53,28 +53,35 @@ class RetryModule(BaseModule):
         tools: list[Tool] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
+        from opentelemetry.trace import StatusCode
+
         last_error: Exception | None = None
 
-        for attempt in range(self._max_retries + 1):
-            try:
-                return await self._inner.invoke(messages, tools, **kwargs)
-            except (ArcLLMAPIError, httpx.ConnectError, httpx.TimeoutException) as e:
-                if not self._is_retryable(e):
-                    raise
-                last_error = e
-                if attempt < self._max_retries:
-                    wait = self._calculate_wait(attempt, e)
-                    logger.warning(
-                        "Retry attempt %d/%d after %.2fs: %s",
-                        attempt + 1,
-                        self._max_retries,
-                        wait,
-                        e,
-                    )
-                    await asyncio.sleep(wait)
+        with self._span("arcllm.retry") as retry_span:
+            for attempt in range(self._max_retries + 1):
+                with self._span("arcllm.retry.attempt", attributes={"arcllm.retry.attempt": attempt}) as attempt_span:
+                    try:
+                        return await self._inner.invoke(messages, tools, **kwargs)
+                    except (ArcLLMAPIError, httpx.ConnectError, httpx.TimeoutException) as e:
+                        if not self._is_retryable(e):
+                            raise
+                        last_error = e
+                        attempt_span.record_exception(e)
+                        attempt_span.set_status(StatusCode.OK)
+                        if attempt < self._max_retries:
+                            wait = self._calculate_wait(attempt, e)
+                            logger.warning(
+                                "Retry attempt %d/%d after %.2fs: %s",
+                                attempt + 1,
+                                self._max_retries,
+                                wait,
+                                e,
+                            )
+                            await asyncio.sleep(wait)
 
-        logger.error("All %d retries exhausted: %s", self._max_retries, last_error)
-        raise last_error  # type: ignore[misc]
+            logger.error("All %d retries exhausted: %s", self._max_retries, last_error)
+            retry_span.set_status(StatusCode.ERROR)
+            raise last_error  # type: ignore[misc]
 
     def _is_retryable(self, error: Exception) -> bool:
         """Check if an error is retryable."""

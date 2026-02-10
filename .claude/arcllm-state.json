@@ -1,8 +1,8 @@
 {
-  "current_step": 12,
+  "current_step": 13,
   "current_task": null,
-  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8, 10, 11],
-  "skipped_steps": [9],
+  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13],
+  "skipped_steps": [9, 12],
   "step_plans": {
     "1": {
       "file": "arcllm-step-01-plan.md",
@@ -185,8 +185,7 @@
         "T10.5 Update __init__.py and modules/__init__.py exports",
         "T10.6 Full test suite verification"
       ]
-    }
-  },
+    },
     "11": {
       "status": "complete",
       "spec_id": "010",
@@ -207,6 +206,38 @@
         "T11.5 Update __init__.py and modules/__init__.py exports",
         "T11.6 Full test suite verification",
         "T11.7 Update state and decision log"
+      ]
+    },
+    "12": {
+      "status": "skipped",
+      "reason": "User jumped to Step 13 (OTel) — budget manager deferred"
+    },
+    "13": {
+      "status": "complete",
+      "spec_id": "011",
+      "tasks": [
+        "T13.1 Add opentelemetry-api to core deps and otel extras",
+        "T13.2 Add [modules.otel] section to config.toml",
+        "T13.3 Add _tracer and _span() to BaseModule",
+        "T13.4 Write test_otel.py (TDD RED)",
+        "T13.5 Implement OtelModule in modules/otel.py",
+        "T13.6 Write test_otel_integration.py (TDD RED)",
+        "T13.7 Add span creation to all existing modules",
+        "T13.8 Update registry.py with otel= kwarg",
+        "T13.9 Update __init__.py and modules/__init__.py exports",
+        "T13.10 Full test suite verification"
+      ],
+      "completed_tasks": [
+        "T13.1 Add opentelemetry-api to core deps and otel extras",
+        "T13.2 Add [modules.otel] section to config.toml",
+        "T13.3 Add _tracer and _span() to BaseModule",
+        "T13.4 Write test_otel.py (TDD RED)",
+        "T13.5 Implement OtelModule in modules/otel.py",
+        "T13.6 Write test_otel_integration.py (TDD RED)",
+        "T13.7 Add span creation to all existing modules",
+        "T13.8 Update registry.py with otel= kwarg",
+        "T13.9 Update __init__.py and modules/__init__.py exports",
+        "T13.10 Full test suite verification"
       ]
     }
   },
@@ -462,6 +493,90 @@
       "reason": "Double opt-in: config flag + DEBUG enabled. Production typically has DEBUG disabled.",
       "date": "2026-02-08",
       "alternatives_considered": ["log at same level as audit record", "require both flags"]
+    },
+    "D-075_security_tool_validator_step": {
+      "decision": "Tool Call Validator and Content Scanner as Steps 17-18 (not folded into Step 14)",
+      "reason": "Keep Step 14 focused on vault/signing/PII. Tool validation and content scanning are distinct concerns.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["fold into Step 14", "skip for now"]
+    },
+    "D-076_trace_context_in_base_module": {
+      "decision": "Bake request_id/trace context into BaseModule — every module inherits it automatically",
+      "reason": "Trace context is cross-cutting. Generating in BaseModule means audit, telemetry, and OTel all get it for free.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["separate TraceContextModule", "defer to OTel only"]
+    },
+    "D-077_pii_redaction_both_directions": {
+      "decision": "PII redaction scans both outbound messages (to LLM) and inbound responses (from LLM)",
+      "reason": "Federal compliance: prevent PII from reaching provider AND prevent PII in responses from propagating through agent system.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["responses only", "outbound only"]
+    },
+    "D-078_compliance_docs_after_step_16": {
+      "decision": "Create SBOM, threat model, and IR runbook as documentation pass after Step 16",
+      "reason": "Complete all code first, then document with full context of what was actually built.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["during relevant steps", "now"]
+    },
+    "D-079_otel_integration_depth": {
+      "decision": "Deep integration — BaseModule + per-module spans for full trace waterfall",
+      "reason": "Full trace waterfall showing retry attempts, fallback hops, rate-limit waits. Richest operational data for 10K agents.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["OTel Module only (single span)", "OTel Module + optional context propagation"]
+    },
+    "D-080_otel_api_dependency": {
+      "decision": "opentelemetry-api as core dependency (not optional)",
+      "reason": "~100KB, zero transitive deps, designed for library authors. No-op when SDK not configured. Always available, no import guards needed.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["optional with import guard"]
+    },
+    "D-081_otel_root_span": {
+      "decision": "OtelModule creates root span, auto-nests under parent context from agent framework",
+      "reason": "Works standalone (traces without agent framework) AND auto-nests as child span when agent framework provides parent. Best of both worlds.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["library spans only (no root)", "auto-span in BaseModule"]
+    },
+    "D-082_otel_attributes": {
+      "decision": "GenAI semantic conventions (gen_ai.*) + custom arcllm.* attributes",
+      "reason": "Standard gen_ai.* for vendor dashboard auto-detection (Datadog, Grafana). Custom arcllm.* for cost, retry, rate-limit details.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["custom only", "standard only"]
+    },
+    "D-083_otel_sdk_setup": {
+      "decision": "Config-driven SDK setup via [modules.otel] TOML section",
+      "reason": "Consistent with all other ArcLLM config. Operators configure exporter, endpoint, protocol, sampling via TOML.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["no SDK helpers (pure library)", "convenience setup function"]
+    },
+    "D-084_otel_sdk_packages": {
+      "decision": "opentelemetry-sdk + OTLP exporters as optional extras: pip install arcllm[otel]",
+      "reason": "SDK + exporters are heavier (~1MB). Clear ArcLLMConfigError if enabled but not installed. Keeps base install light.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["core dependencies"]
+    },
+    "D-085_otel_telemetry_overlap": {
+      "decision": "Keep TelemetryModule and OtelModule as separate concerns (logs vs traces)",
+      "reason": "TelemetryModule = structured logs (grep/Splunk). OtelModule = distributed traces (Jaeger/Datadog). Different observability pillars, both valuable.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["OtelModule replaces TelemetryModule", "TelemetryModule reads from OTel spans"]
+    },
+    "D-086_otel_span_mechanism": {
+      "decision": "BaseModule provides _tracer property and _span() context manager helper",
+      "reason": "Each module explicitly wraps its logic. Gives modules control over span timing and attributes. Works with complex retry/fallback logic.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["auto in BaseModule.invoke()", "@traced decorator"]
+    },
+    "D-087_otel_error_recording": {
+      "decision": "Record exceptions as span events, ERROR status only on final failure",
+      "reason": "Individual retry attempts: exception event but OK status (handled). Root span ERROR only when operation truly fails. Clean trace UI.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["mark each failure as ERROR"]
+    },
+    "D-088_otel_config_shape": {
+      "decision": "Full enterprise config: exporter, endpoint, protocol, sample_rate, headers, TLS (insecure, CA cert, client cert/key), batch tuning, resource_attributes",
+      "reason": "mTLS for federal/zero-trust. Auth headers for cloud collectors. Batch tuning for 10K agents. Resource attributes for deployment metadata.",
+      "date": "2026-02-09",
+      "alternatives_considered": ["minimal config", "basic without TLS"]
     }
   },
   "notes": [
@@ -502,10 +617,27 @@
     "Content opt-in: include_messages + include_response flags, logged at DEBUG level (double opt-in)",
     "Stacking order: Telemetry(Audit(Retry(Fallback(RateLimit(adapter)))))",
     "Strict config key validation: _VALID_CONFIG_KEYS catches typos at construction",
-    "Next: Step 12 — Budget manager module"
+    "Next: Step 12 — Budget manager module",
+    "OWASP/NIST security analysis complete — 15 agentic threats + LLM Top 10 + NIST 800-53 mapped to ArcLLM's layer",
+    "Security decisions: D-075 through D-078 — tool validator as Step 17, content scanner as Step 18, trace context in BaseModule, PII both directions, compliance docs after Step 16",
+    "Updated build order: Steps 12-18 + Phase 5 (compliance docs)",
+    "Step 12 SKIPPED — Budget manager deferred, jumped to Step 13 (OTel)",
+    "Step 13 spec created — 011-otel-export with 10 decisions (D-079 through D-088)",
+    "OTel architecture: deep integration (BaseModule _tracer/_span), OtelModule root span, GenAI conventions + arcllm.* attrs",
+    "Config: full enterprise (exporter, endpoint, protocol, sample_rate, headers, TLS/mTLS, batch tuning, resource_attributes)",
+    "Dependencies: opentelemetry-api core, opentelemetry-sdk + OTLP as [otel] extras",
+    "Next: T13.1 — Add opentelemetry-api to core deps",
+    "Step 13 complete — 10/10 tasks, 56 new tests, 379 total passing, 1 skipped",
+    "OtelModule: root span with GenAI semantic conventions (gen_ai.system, gen_ai.request.model, gen_ai.usage.*, gen_ai.response.*)",
+    "BaseModule: _tracer property (trace.get_tracer('arcllm')) + _span() context manager with exception recording",
+    "All modules instrumented: retry (retry+attempt spans), fallback (fallback+attempt spans), rate_limit (wait_ms attr), telemetry (duration+cost attrs), audit (metadata attrs)",
+    "Config-driven SDK setup: exporter (otlp/console/none), endpoint, protocol (grpc/http), sample_rate, headers, TLS/mTLS, batch tuning",
+    "opentelemetry-api as core dep, SDK+OTLP as [otel] extras",
+    "Stacking order: Otel(Telemetry(Audit(Retry(Fallback(RateLimit(adapter))))))",
+    "Next: Step 14 — Security layer (vault, signing, PII redaction)"
   ],
   "meta": {
-    "last_updated": "2026-02-08",
+    "last_updated": "2026-02-09",
     "created": "2026-02-07"
   }
 }

@@ -46,30 +46,38 @@ class FallbackModule(BaseModule):
         tools: list[Tool] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        try:
-            return await self._inner.invoke(messages, tools, **kwargs)
-        except Exception as primary_error:
-            logger.warning(
-                "Primary provider failed: %s. Trying %d fallback(s).",
-                primary_error,
-                len(self._chain),
-            )
-            for provider_name in self._chain:
-                fallback = None
-                try:
-                    fallback = load_model(provider_name)
-                    result = await fallback.invoke(messages, tools, **kwargs)
-                    logger.info("Fallback to '%s' succeeded.", provider_name)
-                    return result
-                except Exception as fallback_error:
-                    logger.warning(
-                        "Fallback '%s' failed: %s", provider_name, fallback_error
-                    )
-                    continue
-                finally:
-                    if fallback is not None and hasattr(fallback, "close"):
-                        await fallback.close()
-            logger.error(
-                "All %d fallbacks exhausted. Raising primary error.", len(self._chain)
-            )
-            raise primary_error
+        with self._span("arcllm.fallback") as fallback_span:
+            try:
+                return await self._inner.invoke(messages, tools, **kwargs)
+            except Exception as primary_error:
+                fallback_span.add_event(
+                    "primary_failed", {"error": str(primary_error)}
+                )
+                logger.warning(
+                    "Primary provider failed: %s. Trying %d fallback(s).",
+                    primary_error,
+                    len(self._chain),
+                )
+                for provider_name in self._chain:
+                    fallback = None
+                    with self._span("arcllm.fallback.attempt", attributes={"arcllm.fallback.provider": provider_name}):
+                        try:
+                            fallback = load_model(provider_name)
+                            result = await fallback.invoke(messages, tools, **kwargs)
+                            logger.info("Fallback to '%s' succeeded.", provider_name)
+                            return result
+                        except Exception as fallback_error:
+                            logger.warning(
+                                "Fallback '%s' failed: %s",
+                                provider_name,
+                                fallback_error,
+                            )
+                            continue
+                        finally:
+                            if fallback is not None and hasattr(fallback, "close"):
+                                await fallback.close()
+                logger.error(
+                    "All %d fallbacks exhausted. Raising primary error.",
+                    len(self._chain),
+                )
+                raise primary_error

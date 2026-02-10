@@ -954,3 +954,134 @@ Key findings from research:
 **Rationale**: Double opt-in: config flag must be True AND DEBUG logging must be enabled. In production, DEBUG is typically disabled. Even if config flag is accidentally left on, content won't appear unless DEBUG is explicitly enabled.
 
 ---
+
+## D-079: OTel Integration Depth
+
+**Decision**: Deep integration — BaseModule `_tracer`/`_span()` + per-module child spans.
+
+**Alternatives considered**:
+- Wrapper module only — OtelModule wraps adapter, single span per call, no internal visibility
+- Deep integration in BaseModule — every module creates child spans, full trace waterfall
+- Module + context propagation — deep integration plus W3C Trace Context for inter-service
+
+**Rationale**: Full trace waterfall showing retry attempts, fallback hops, rate-limit waits. With 10K concurrent agents, operators need to see the complete execution path of each request through all layers, not just a single wrapper span. Context propagation deferred to future step.
+
+---
+
+## D-080: OTel API Dependency Strategy
+
+**Decision**: Core dependency (`opentelemetry-api>=1.20` in `[project.dependencies]`).
+
+**Alternatives considered**:
+- Core dependency — always available, no import guards needed, ~100KB, zero transitive deps
+- Optional with import guard — lighter base install but requires try/except everywhere
+
+**Rationale**: `opentelemetry-api` is designed for library authors — ~100KB, zero transitive deps, no-op when SDK not configured. Always available means `_tracer` and `_span()` work everywhere without import guards. The SDK (heavier, ~1MB) stays optional.
+
+---
+
+## D-081: Root Span Ownership
+
+**Decision**: OtelModule creates root span, auto-nests under parent context when present.
+
+**Alternatives considered**:
+- OtelModule as root — creates `arcllm.invoke` root span, auto-nests when agent framework provides parent
+- BaseModule as root — implicit, every module gets spans but no explicit root control
+- Agent framework only — library never creates root, requires external framework
+
+**Rationale**: Works standalone (traces without agent framework) AND auto-nests as child span when agent framework provides parent context via OTel's automatic context propagation. No conflicts, no complexity. Future BlackArc agent framework can create its own root span and ArcLLM's spans will automatically nest underneath.
+
+**Influence**: Builder asked how ArcLLM (library) and future agent framework (application) would coexist. Explained OTel's `start_as_current_span` auto-parenting — if parent context exists, new span becomes child. No integration code needed.
+
+---
+
+## D-082: Span Attributes
+
+**Decision**: Both GenAI semantic conventions and custom `arcllm.*` attributes.
+
+**Alternatives considered**:
+- GenAI conventions only (`gen_ai.*`) — standard, vendor dashboard auto-detection
+- Custom `arcllm.*` only — full control, no convention dependency
+- Both conventions — standard for vendor compatibility, custom for ArcLLM-specific data
+
+**Rationale**: Standard `gen_ai.*` attributes enable auto-detection in Datadog, Grafana, and other vendor dashboards. Custom `arcllm.*` attributes capture ArcLLM-specific operational data (cost, retry details, rate-limit waits) that no standard convention covers. Best of both worlds.
+
+---
+
+## D-083: SDK/Exporter Configuration
+
+**Decision**: Config-driven via TOML (`[modules.otel]` section).
+
+**Alternatives considered**:
+- No SDK helpers — user configures OTel SDK themselves before importing ArcLLM
+- Convenience function — `arcllm.setup_otel(endpoint=...)` helper
+- Config-driven via TOML — `[modules.otel]` section drives exporter, endpoint, protocol, sampling
+
+**Rationale**: Consistent with all other ArcLLM module config. SREs can tune trace volume and export behavior via config files without code changes across thousands of deployed agents. Config changes go through existing change management processes.
+
+---
+
+## D-084: SDK Package Strategy
+
+**Decision**: Optional extras (`pip install arcllm[otel]` installs SDK + exporters).
+
+**Alternatives considered**:
+- Optional extras — `[otel]` extra installs `opentelemetry-sdk`, OTLP exporters (~1MB)
+- Core dependencies — include SDK in base install
+
+**Rationale**: SDK + exporters are heavier (~1MB). Most agents in development don't need trace export. Clear `ArcLLMConfigError` if OTel is enabled but SDK not installed, with install instructions. Keeps base install light while making production setup a single pip flag.
+
+---
+
+## D-085: TelemetryModule vs OTel Overlap
+
+**Decision**: Keep both modules, separate concerns.
+
+**Alternatives considered**:
+- Keep both, separate concerns — TelemetryModule for structured logs, OtelModule for distributed traces
+- OTel replaces TelemetryModule — single observability module
+- TelemetryModule reads from OTel spans — one source, two outputs
+
+**Rationale**: Different observability pillars serve different needs. TelemetryModule = structured logs (grep/Splunk, always available, zero setup). OtelModule = distributed traces (Jaeger/Datadog, requires collector). Logs are greppable and immediate. Traces show hierarchy and correlation. Both valuable, not redundant.
+
+---
+
+## D-086: Span Mechanism in BaseModule
+
+**Decision**: Helper method `_span(name, attributes=None)` as context manager.
+
+**Alternatives considered**:
+- Auto in BaseModule.invoke() — automatic span for every invoke, implicit
+- Helper method `_span()` — explicit, each module wraps its logic, controls timing and attributes
+- `@traced` decorator — clean syntax but inflexible for complex retry/fallback flows
+
+**Rationale**: Explicit wrapping gives modules control over span timing and attributes. RetryModule can create per-attempt spans inside a loop. FallbackModule can create per-provider spans. Decorator pattern can't handle these complex flows. Helper method is the right tool.
+
+---
+
+## D-087: Error Recording on Spans
+
+**Decision**: Record exceptions as events, set ERROR status only on final failure.
+
+**Alternatives considered**:
+- Record exception event on span, ERROR only on final failure — clean trace UI, expected retries show as OK
+- Mark each failed attempt as ERROR — noisy trace UI, every retry looks like a failure
+
+**Rationale**: Individual retry attempts: record exception event (for debugging visibility) but set status OK (the error was handled by retrying). Root retry span: ERROR only when all retries are exhausted and the operation truly fails. This produces clean trace UIs where expected retries don't trigger alerts.
+
+---
+
+## D-088: OTel Config Shape
+
+**Decision**: Full enterprise config — auth headers, TLS/mTLS, batch tuning, resource attributes.
+
+**Alternatives considered**:
+- Basic — exporter, endpoint, protocol, service_name, sample_rate
+- Basic + auth — add headers dict for OTLP authentication
+- Full enterprise — add TLS settings (insecure, certificate_file, client_key_file, client_cert_file), batch tuning (timeout_ms, max_batch_size, max_queue_size, schedule_delay_ms), resource attributes
+
+**Rationale**: Federal production (BlackArc Systems, CTG Federal) requires mTLS for zero-trust networks. 10K agents need batch tuning to control trace volume. Resource attributes enable deployment metadata (environment, version, region). All knobs configurable via TOML, all with sensible defaults.
+
+**Influence**: Builder progressively expanded config — first basic, then "add more options" (auth, batch tuning), then "add TLS settings" (mTLS for federal). Each expansion driven by specific operational needs.
+
+---

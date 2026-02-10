@@ -113,6 +113,7 @@ def load_model(
     rate_limit: bool | dict[str, Any] | None = None,
     telemetry: bool | dict[str, Any] | None = None,
     audit: bool | dict[str, Any] | None = None,
+    otel: bool | dict[str, Any] | None = None,
 ) -> LLMProvider:
     """Load a configured model object for the given provider.
 
@@ -132,7 +133,7 @@ def load_model(
         - ``dict``: enable with custom settings (merged over defaults)
         - ``None`` (default): use config.toml enabled flag
 
-    Stacking order (outermost first): Telemetry → Audit → Retry → Fallback → RateLimit → Adapter.
+    Stacking order (outermost first): Otel → Telemetry → Audit → Retry → Fallback → RateLimit → Adapter.
 
     Args:
         provider: Provider name (e.g., "anthropic", "openai").
@@ -144,6 +145,7 @@ def load_model(
         telemetry: TelemetryModule configuration override. Pricing data is
             automatically injected from provider model metadata.
         audit: AuditModule configuration override. PII-safe metadata logging.
+        otel: OtelModule configuration override. OpenTelemetry distributed tracing.
 
     Returns:
         A configured LLMProvider instance ready for invoke().
@@ -210,5 +212,11 @@ def load_model(
                 "cost_cache_write_per_1m", model_meta.cost_cache_write_per_1m
             )
         result = TelemetryModule(telemetry_config, result)
+
+    otel_config = _resolve_module_config("otel", otel)
+    if otel_config is not None:
+        from arcllm.modules.otel import OtelModule
+
+        result = OtelModule(otel_config, result)
 
     return result

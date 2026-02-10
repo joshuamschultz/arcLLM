@@ -46,6 +46,7 @@ _LAZY_IMPORTS: dict[str, str] = {
     "FallbackModule": "arcllm.modules.fallback",
     "RateLimitModule": "arcllm.modules.rate_limit",
     "RetryModule": "arcllm.modules.retry",
+    "OtelModule": "arcllm.modules.otel",
     "TelemetryModule": "arcllm.modules.telemetry",
 }
 
@@ -68,6 +69,7 @@ __all__ = [
     "AuditModule",
     "BaseModule",
     "FallbackModule",
+    "OtelModule",
     "RateLimitModule",
     "RetryModule",
     "TelemetryModule",

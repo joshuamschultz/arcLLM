@@ -30,3 +30,22 @@ chain = ["anthropic", "openai"]
 enabled = false
 requests_per_minute = 60
 burst_capacity = 60
+
+[modules.otel]
+enabled = false
+exporter = "otlp"
+endpoint = "http://localhost:4317"
+protocol = "grpc"
+service_name = "arcllm"
+sample_rate = 1.0
+headers = {}
+insecure = false
+certificate_file = ""
+client_key_file = ""
+client_cert_file = ""
+timeout_ms = 10000
+max_batch_size = 512
+max_queue_size = 2048
+schedule_delay_ms = 5000
+
+[modules.otel.resource_attributes]

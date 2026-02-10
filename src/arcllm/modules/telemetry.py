@@ -78,28 +78,32 @@ class TelemetryModule(BaseModule):
         tools: list[Tool] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        start = time.monotonic()
-        response = await self._inner.invoke(messages, tools, **kwargs)
-        elapsed = time.monotonic() - start
+        with self._span("arcllm.telemetry") as tel_span:
+            start = time.monotonic()
+            response = await self._inner.invoke(messages, tools, **kwargs)
+            elapsed = time.monotonic() - start
 
-        usage = response.usage
-        cost = self._calculate_cost(usage)
-        duration_ms = round(elapsed * 1000, 1)
+            usage = response.usage
+            cost = self._calculate_cost(usage)
+            duration_ms = round(elapsed * 1000, 1)
 
-        log_structured(
-            logger,
-            self._log_level,
-            "LLM call",
-            provider=self._inner.name,
-            model=response.model,
-            duration_ms=duration_ms,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            total_tokens=usage.total_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_write_tokens=usage.cache_write_tokens,
-            cost_usd=cost,
-            stop_reason=response.stop_reason,
-        )
+            tel_span.set_attribute("arcllm.telemetry.duration_ms", duration_ms)
+            tel_span.set_attribute("arcllm.telemetry.cost_usd", cost)
 
-        return response
+            log_structured(
+                logger,
+                self._log_level,
+                "LLM call",
+                provider=self._inner.name,
+                model=response.model,
+                duration_ms=duration_ms,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                total_tokens=usage.total_tokens,
+                cache_read_tokens=usage.cache_read_tokens,
+                cache_write_tokens=usage.cache_write_tokens,
+                cost_usd=cost,
+                stop_reason=response.stop_reason,
+            )
+
+            return response

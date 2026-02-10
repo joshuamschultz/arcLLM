@@ -113,11 +113,18 @@ class RateLimitModule(BaseModule):
         tools: list[Tool] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        wait = await self._bucket.acquire()
-        if wait > 0:
-            logger.warning(
-                "Rate limited for provider '%s'. Waited %.2fs for token.",
-                self._provider_name,
-                wait,
-            )
-        return await self._inner.invoke(messages, tools, **kwargs)
+        with self._span("arcllm.rate_limit") as rl_span:
+            wait = await self._bucket.acquire()
+            wait_ms = round(wait * 1000, 1)
+            rl_span.set_attribute("arcllm.rate_limit.wait_ms", wait_ms)
+            if wait > 0:
+                rl_span.add_event(
+                    "throttled",
+                    {"arcllm.rate_limit.wait_ms": wait_ms},
+                )
+                logger.warning(
+                    "Rate limited for provider '%s'. Waited %.2fs for token.",
+                    self._provider_name,
+                    wait,
+                )
+            return await self._inner.invoke(messages, tools, **kwargs)

@@ -51,26 +51,36 @@ class AuditModule(BaseModule):
         tools: list[Tool] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        response = await self._inner.invoke(messages, tools, **kwargs)
+        with self._span("arcllm.audit") as audit_span:
+            response = await self._inner.invoke(messages, tools, **kwargs)
 
-        content_length = len(response.content) if response.content else 0
+            content_length = len(response.content) if response.content else 0
 
-        log_structured(
-            logger,
-            self._log_level,
-            "Audit",
-            provider=self._inner.name,
-            model=response.model,
-            message_count=len(messages),
-            stop_reason=response.stop_reason,
-            tools_provided=len(tools) if tools is not None else None,
-            tool_calls=len(response.tool_calls) if response.tool_calls else None,
-            content_length=content_length,
-        )
+            audit_span.set_attribute("arcllm.audit.message_count", len(messages))
+            audit_span.set_attribute("arcllm.audit.content_length", content_length)
+            if tools is not None:
+                audit_span.set_attribute("arcllm.audit.tools_provided", len(tools))
+            if response.tool_calls:
+                audit_span.set_attribute(
+                    "arcllm.audit.tool_calls", len(response.tool_calls)
+                )
 
-        if self._include_messages and logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Audit messages | %s", _sanitize(str(messages)))
-        if self._include_response and logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Audit response | %s", _sanitize(str(response.content)))
+            log_structured(
+                logger,
+                self._log_level,
+                "Audit",
+                provider=self._inner.name,
+                model=response.model,
+                message_count=len(messages),
+                stop_reason=response.stop_reason,
+                tools_provided=len(tools) if tools is not None else None,
+                tool_calls=len(response.tool_calls) if response.tool_calls else None,
+                content_length=content_length,
+            )
 
-        return response
+            if self._include_messages and logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Audit messages | %s", _sanitize(str(messages)))
+            if self._include_response and logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Audit response | %s", _sanitize(str(response.content)))
+
+            return response

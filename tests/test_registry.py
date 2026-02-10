@@ -495,6 +495,85 @@ class TestModuleStacking:
         assert isinstance(model._inner._inner._inner._inner, RateLimitModule)
         assert isinstance(model._inner._inner._inner._inner._inner, AnthropicAdapter)
 
+    def test_load_model_with_otel(self):
+        """otel={exporter: none} wraps adapter with OtelModule."""
+        from arcllm.modules.otel import OtelModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", otel={"exporter": "none"})
+        assert isinstance(model, OtelModule)
+
+    def test_load_model_otel_full_stack(self):
+        """Full stack: Otel(Telemetry(Audit(Retry(Fallback(RateLimit(adapter))))))."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.modules.audit import AuditModule
+        from arcllm.modules.fallback import FallbackModule
+        from arcllm.modules.otel import OtelModule
+        from arcllm.modules.rate_limit import RateLimitModule
+        from arcllm.modules.retry import RetryModule
+        from arcllm.modules.telemetry import TelemetryModule
+        from arcllm.registry import load_model
+
+        model = load_model(
+            "anthropic",
+            retry=True,
+            fallback=True,
+            rate_limit=True,
+            telemetry=True,
+            audit=True,
+            otel={"exporter": "none"},
+        )
+        assert isinstance(model, OtelModule)
+        assert isinstance(model._inner, TelemetryModule)
+        assert isinstance(model._inner._inner, AuditModule)
+        assert isinstance(model._inner._inner._inner, RetryModule)
+        assert isinstance(model._inner._inner._inner._inner, FallbackModule)
+        assert isinstance(model._inner._inner._inner._inner._inner, RateLimitModule)
+        assert isinstance(
+            model._inner._inner._inner._inner._inner._inner, AnthropicAdapter
+        )
+
+    def test_load_model_otel_false_overrides_config(self):
+        """otel=False disables even if config.toml enables it."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.otel import OtelModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"otel": ModuleConfig(enabled=True, exporter="none")},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            model = load_model("anthropic", otel=False)
+        assert not isinstance(model, OtelModule)
+        assert isinstance(model, AnthropicAdapter)
+
+    def test_load_model_otel_dict_overrides_config(self):
+        """otel={...} kwarg dict merges over config.toml defaults."""
+        from arcllm.config import GlobalConfig, ModuleConfig
+        from arcllm.modules.otel import OtelModule
+        from arcllm.registry import load_model
+
+        mock_global = GlobalConfig(
+            defaults={"provider": "anthropic", "temperature": 0.7, "max_tokens": 4096},
+            modules={"otel": ModuleConfig(enabled=True, exporter="otlp")},
+        )
+        with patch("arcllm.registry.load_global_config", return_value=mock_global):
+            # kwarg overrides config.toml exporter from "otlp" to "none"
+            model = load_model("anthropic", otel={"exporter": "none"})
+        assert isinstance(model, OtelModule)
+
+    def test_load_model_otel_only(self):
+        """OTel without other modules — just Otel(adapter)."""
+        from arcllm.adapters.anthropic import AnthropicAdapter
+        from arcllm.modules.otel import OtelModule
+        from arcllm.registry import load_model
+
+        model = load_model("anthropic", otel={"exporter": "none"})
+        assert isinstance(model, OtelModule)
+        assert isinstance(model._inner, AnthropicAdapter)
+
     def test_clear_cache_clears_buckets(self):
         """clear_cache() resets rate limit shared state."""
         from arcllm.modules.rate_limit import _bucket_registry
