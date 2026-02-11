@@ -1,7 +1,7 @@
 {
-  "current_step": 14,
+  "current_step": 15,
   "current_task": null,
-  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 14],
+  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 14, 15],
   "skipped_steps": [9, 12],
   "step_plans": {
     "1": {
@@ -270,6 +270,46 @@
         "T14.10 Write test_security.py (TDD RED)",
         "T14.11 Implement SecurityModule in modules/security.py (TDD GREEN)",
         "T14.12 Update registry.py, __init__.py, modules/__init__.py"
+      ]
+    },
+    "15": {
+      "status": "complete",
+      "spec_id": "013",
+      "tasks": [
+        "T15.1 Add api_key_required to ProviderSettings",
+        "T15.2 Update BaseAdapter for optional auth",
+        "T15.3 Update OpenaiAdapter for conditional auth headers",
+        "T15.4 Write test_open_providers.py scaffold",
+        "T15.5 Create Ollama provider (TOML + adapter)",
+        "T15.6 Create vLLM provider (TOML + adapter)",
+        "T15.7 Create Together AI provider (TOML + adapter)",
+        "T15.8 Create Groq provider (TOML + adapter)",
+        "T15.9 Create Fireworks AI + DeepSeek providers",
+        "T15.10 Create HuggingFace providers (cloud + TGI)",
+        "T15.11 Write test_mistral.py",
+        "T15.12 Create Mistral provider (TOML + adapter with overrides)",
+        "T15.13 Update __init__.py with lazy imports",
+        "T15.14 Update .env.example",
+        "T15.15 Add registry integration tests",
+        "T15.16 Full test suite verification"
+      ],
+      "completed_tasks": [
+        "T15.1 Add api_key_required to ProviderSettings",
+        "T15.2 Update BaseAdapter for optional auth",
+        "T15.3 Update OpenaiAdapter for conditional auth headers",
+        "T15.4 Write test_open_providers.py scaffold",
+        "T15.5 Create Ollama provider (TOML + adapter)",
+        "T15.6 Create vLLM provider (TOML + adapter)",
+        "T15.7 Create Together AI provider (TOML + adapter)",
+        "T15.8 Create Groq provider (TOML + adapter)",
+        "T15.9 Create Fireworks AI + DeepSeek providers",
+        "T15.10 Create HuggingFace providers (cloud + TGI)",
+        "T15.11 Write test_mistral.py",
+        "T15.12 Create Mistral provider (TOML + adapter with overrides)",
+        "T15.13 Update __init__.py with lazy imports",
+        "T15.14 Update .env.example",
+        "T15.15 Add registry integration tests",
+        "T15.16 Full test suite verification"
       ]
     }
   },
@@ -675,6 +715,48 @@
       "reason": "Zero adapter changes needed. Adapter reads API key from env var in __init__ as always. Vault resolution is transparent to the adapter layer.",
       "date": "2026-02-11",
       "alternatives_considered": ["pass resolved key to adapter constructor", "adapter calls vault directly"]
+    },
+    "D-100_thin_alias_adapters": {
+      "decision": "OpenAI-compatible providers use thin alias adapters inheriting OpenaiAdapter with name override only",
+      "reason": "Preserves convention-based registry (D-041/D-042). Each provider gets ~10-line file. 8 of 9 new providers are pure aliases.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["format-based resolution", "fallback chain in registry", "OpenAI-compatible base class"]
+    },
+    "D-101_api_key_required_flag": {
+      "decision": "Boolean api_key_required field in ProviderSettings TOML, defaults to true",
+      "reason": "Explicit, self-documenting. BaseAdapter skips auth when false. Still reads env var if set (optional auth).",
+      "date": "2026-02-11",
+      "alternatives_considered": ["empty api_key_env means optional", "LocalBaseAdapter subclass"]
+    },
+    "D-102_provider_scope_all": {
+      "decision": "All 10 providers: Ollama, vLLM, Together, Groq, Fireworks, DeepSeek, Mistral, HuggingFace, HuggingFace TGI",
+      "reason": "Full open-model coverage. Local for air-gapped/federal, cloud for cost optimization. ~20 lines per provider.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["3-4 most popular", "cloud only", "local only first"]
+    },
+    "D-103_model_catalog_strategy": {
+      "decision": "Pre-populate common models with metadata, graceful defaults for unknown",
+      "reason": "Popular models get correct metadata. Missing models still work. Balance between useful defaults and maintenance burden.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["minimal TOML (no models)", "exhaustive catalog"]
+    },
+    "D-104_local_provider_costs": {
+      "decision": "Zero cost defaults (cost_*_per_1m = 0.0) for local providers, configurable override",
+      "reason": "Local inference has no API billing. Orgs can override for internal GPU cost tracking.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["no cost fields for local", "estimate GPU costs per model"]
+    },
+    "D-105_mistral_quirk_overrides": {
+      "decision": "MistralAdapter overrides tool_choice mapping (required→any) and stop_reason mapping (model_length→max_tokens)",
+      "reason": "Only provider with known API divergences from OpenAI standard. Targeted method overrides keep adapter simple (~40 lines).",
+      "date": "2026-02-11",
+      "alternatives_considered": ["pure alias (ignore quirks)", "config-driven quirk map in TOML"]
+    },
+    "D-106_huggingface_naming": {
+      "decision": "Two separate providers: huggingface (cloud Inference API) + huggingface_tgi (self-hosted TGI)",
+      "reason": "Different auth, base_url, model naming. Separate providers cleaner than mode toggling.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["single huggingface with mode toggle", "hf and hf_tgi (shorter names)"]
     }
   },
   "notes": [
@@ -742,7 +824,22 @@
     "Stacking order: Otel → Telemetry → Audit → Security → Retry → Fallback → RateLimit → Adapter",
     "Coverage: _pii 100%, _signing 97%, vault 92%, security 89%",
     "Decisions D-089 through D-099 recorded",
-    "Next: Step 15 — Local providers (Ollama, vLLM)"
+    "Step 15 complete — 16/16 tasks, 83 new tests (69 open_providers + 14 mistral), 538 total passing, 1 skipped",
+    "Thin alias pattern: 8 of 9 new providers are pure OpenaiAdapter aliases (~10 lines each)",
+    "MistralAdapter: only provider with quirk overrides (tool_choice required→any, model_length stop reason)",
+    "api_key_required flag: 1 new field in ProviderSettings, 1 conditional in BaseAdapter, 1 conditional in OpenaiAdapter",
+    "TOML gotcha: model names with dots must be quoted [models.\"llama3.2\"] — unquoted dots parsed as nested tables",
+    "HuggingFace TGI naming: huggingface_tgi.title() = Huggingface_Tgi → Huggingface_TgiAdapter (valid Python, works with convention)",
+    "9 new provider TOMLs, 9 new adapter files, 3 modified core files (config.py, base.py, openai.py)",
+    "Decisions D-100 through D-106 recorded",
+    "Decision log updated: D-075 through D-106 appended (was previously missing D-075 through D-099)",
+    "Next: Step 16 — Full integration test",
+    "Step 13 (spec 011) review — 6-agent swarm, CONDITIONAL PASS → PASS after 3 required fixes + 1 advisory fix",
+    "Review Fix 1: TLS certificates wired to OTLP exporters (gRPC + HTTP)",
+    "Review Fix 2: Idempotency guard on _setup_sdk() with _sdk_configured flag, reset in clear_cache()",
+    "Review Fix 3: gen_ai.response.finish_reasons changed from string to list per GenAI semantic conventions",
+    "Advisory fix: _span() set_status now includes str(exc) error description",
+    "541 total tests passing, 1 skipped after review fixes"
   ],
   "meta": {
     "last_updated": "2026-02-11",

@@ -38,6 +38,7 @@ class ProviderSettings(BaseModel):
     api_format: str
     base_url: str
     api_key_env: str
+    api_key_required: bool = True
     default_model: str
     default_temperature: float
     vault_path: str = ""

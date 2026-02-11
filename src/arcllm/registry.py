@@ -32,6 +32,10 @@ def clear_cache() -> None:
 
     clear_buckets()
 
+    import arcllm.modules.otel as _otel_mod
+
+    _otel_mod._sdk_configured = False
+
 
 def _get_adapter_class(provider_name: str) -> type[LLMProvider]:
     """Look up the adapter class by naming convention.

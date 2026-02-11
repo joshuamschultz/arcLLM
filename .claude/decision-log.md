@@ -1085,3 +1085,277 @@ Key findings from research:
 **Influence**: Builder progressively expanded config — first basic, then "add more options" (auth, batch tuning), then "add TLS settings" (mTLS for federal). Each expansion driven by specific operational needs.
 
 ---
+
+## D-075: Security — Tool Call Validator as Step 17
+
+**Decision**: Tool Call Validator and Content Scanner as Steps 17-18, not folded into Step 14.
+
+**Alternatives considered**:
+- Fold into Step 14 (security layer) — overloads one step
+- Skip for now — leaves gap in agentic security
+
+**Rationale**: Keep Step 14 focused on vault/signing/PII. Tool validation and content scanning are distinct concerns with their own test matrices.
+
+---
+
+## D-076: Trace Context in BaseModule
+
+**Decision**: Bake request_id/trace context into BaseModule — every module inherits it automatically.
+
+**Alternatives considered**:
+- Separate TraceContextModule
+- Defer to OTel only
+
+**Rationale**: Trace context is cross-cutting. Generating in BaseModule means audit, telemetry, and OTel all get it for free without extra module configuration.
+
+---
+
+## D-077: PII Redaction Both Directions
+
+**Decision**: PII redaction scans both outbound messages (to LLM) and inbound responses (from LLM).
+
+**Alternatives considered**:
+- Outbound only — prevents PII reaching provider
+- Responses only — prevents PII propagating from LLM output
+
+**Rationale**: Federal compliance requires preventing PII from reaching provider AND preventing PII in responses from propagating through agent system.
+
+---
+
+## D-078: Compliance Docs After Step 16
+
+**Decision**: Create SBOM, threat model, and IR runbook as documentation pass after Step 16.
+
+**Alternatives considered**:
+- During relevant steps
+- Create now
+
+**Rationale**: Complete all code first, then document with full context of what was actually built.
+
+---
+
+## D-089: Security Module Structure
+
+**Decision**: Two modules — VaultResolver (construction-time key resolution) + SecurityModule (per-invoke PII + signing).
+
+**Alternatives considered**:
+- Single SecurityModule for all three concerns
+- Three separate modules (vault, PII, signing)
+
+**Rationale**: Vault is a one-time setup concern (resolve key before adapter construction). PII+signing are per-request concerns. Different lifecycles = different modules.
+
+---
+
+## D-090: Vault Abstraction
+
+**Decision**: Protocol + extras pattern — VaultBackend protocol, backends loaded via importlib from config string, pip install arcllm[aws] for AWS support.
+
+**Alternatives considered**:
+- Built-in backends (heavier base install)
+- Env-var-only (no vault)
+
+**Rationale**: Set backend in config, install extra, it just works. No unused backends loaded.
+
+---
+
+## D-091: Vault Fallback
+
+**Decision**: Vault first, env var fallback — try vault, fall back to os.environ if vault unavailable.
+
+**Alternatives considered**:
+- Vault only (no fallback)
+- Env var first, vault override
+
+**Rationale**: Vault is authoritative when configured, but env var provides graceful degradation for dev/test environments.
+
+---
+
+## D-092: Key Caching
+
+**Decision**: TTL-based cache with time.monotonic(), default 300 seconds.
+
+**Alternatives considered**:
+- No caching
+- Indefinite cache with manual invalidation
+- LRU cache
+
+**Rationale**: Avoids hammering vault on every load_model() call. time.monotonic() immune to clock skew. 5min default balances freshness vs performance.
+
+---
+
+## D-093: PII Detection
+
+**Decision**: Regex-based with pluggable PiiDetector protocol — built-in patterns + custom regex + extensible to presidio/spacy.
+
+**Alternatives considered**:
+- Regex only (no extensibility)
+- Presidio default
+- NER-based
+
+**Rationale**: Default regex works out of box, easy to add custom patterns, extensible to presidio or spacy models via PiiDetector protocol. No unused deps loaded.
+
+---
+
+## D-094: PII Redaction Format
+
+**Decision**: Type-tagged placeholders: [PII:SSN], [PII:EMAIL], [PII:PHONE] etc.
+
+**Alternatives considered**:
+- Generic [REDACTED]
+- Unicode replacement character
+- Empty string
+
+**Rationale**: Preserves information about what was redacted for audit/debugging without exposing actual PII. Agents can still reason about content structure.
+
+---
+
+## D-095: Signing Algorithm
+
+**Decision**: Both — HMAC-SHA256 default (stdlib) + ECDSA P-256 optional (arcllm[signing] extra).
+
+**Alternatives considered**:
+- HMAC only
+- ECDSA only
+- Ed25519
+
+**Rationale**: HMAC covers 90% of cases with zero deps. ECDSA P-256 for NIST FIPS 186-5 compliance in federal environments. Optional extra keeps base install light.
+
+---
+
+## D-096: Signature Scope
+
+**Decision**: Sign messages + tools + model name via canonical JSON serialization.
+
+**Alternatives considered**:
+- Messages only
+- Full request body
+- Messages + model only
+
+**Rationale**: Covers the full request intent. sort_keys=True + compact separators ensures deterministic canonical form.
+
+---
+
+## D-097: Security Phases
+
+**Decision**: Single SecurityModule with two phases — PII redaction (pre/post) + signing (post).
+
+**Alternatives considered**:
+- Separate PiiModule + SigningModule
+- Combined with vault
+
+**Rationale**: Same module, clear phase ordering. PII redact outbound → call inner → PII redact inbound → sign. Audit sees redacted data (correct stacking order).
+
+---
+
+## D-098: Vault Config Layout
+
+**Decision**: Global [vault] section in config.toml + per-provider vault_path in provider TOMLs.
+
+**Alternatives considered**:
+- All in provider TOML
+- All in global config
+- Environment variables only
+
+**Rationale**: Vault backend is global (one vault for entire system). vault_path is per-provider (different secrets for different API keys).
+
+---
+
+## D-099: Vault → Env Var Handoff
+
+**Decision**: VaultResolver sets os.environ[api_key_env] before adapter construction.
+
+**Alternatives considered**:
+- Pass resolved key to adapter constructor
+- Adapter calls vault directly
+
+**Rationale**: Zero adapter changes needed. Adapter reads API key from env var in __init__ as always. Vault resolution is transparent to the adapter layer.
+
+---
+
+## D-100: Thin Alias Adapter Pattern
+
+**Decision**: OpenAI-compatible providers use thin alias adapters inheriting from OpenaiAdapter with only a name property override.
+
+**Alternatives considered**:
+- Format-based resolution (skip adapter file entirely)
+- Fallback chain in registry
+- OpenAI-compatible base class (separate from OpenaiAdapter)
+
+**Rationale**: Preserves convention-based registry (D-041/D-042). Each provider gets its own ~10-line file. Explicit class per provider enables future quirk overrides without registry changes.
+
+**Influence**: 8 of 9 new providers are pure aliases. Pattern proven by the fact that only Mistral needed overrides.
+
+---
+
+## D-101: `api_key_required` Flag
+
+**Decision**: Boolean `api_key_required` field in ProviderSettings TOML, defaults to true for backward compatibility.
+
+**Alternatives considered**:
+- Empty api_key_env string means optional
+- LocalBaseAdapter subclass with different init logic
+
+**Rationale**: Explicit boolean in [provider] section is self-documenting. BaseAdapter skips auth validation when false. Still reads env var if set (optional auth for secured local servers). Minimal code change: one conditional in BaseAdapter.__init__(), one in OpenaiAdapter._build_headers().
+
+---
+
+## D-102: Provider Scope — All 10
+
+**Decision**: Implement all 10 providers: Ollama, vLLM, Together AI, Groq, Fireworks AI, DeepSeek, Mistral, HuggingFace (cloud), HuggingFace TGI (self-hosted).
+
+**Alternatives considered**:
+- Start with 3-4 most popular
+- Cloud only (skip local)
+- Local only first
+
+**Rationale**: Full open-model coverage in one step. Local providers essential for air-gapped/federal environments. Cloud providers for cost optimization and model diversity. All use same thin alias pattern, so incremental cost per provider is ~20 lines (TOML + adapter).
+
+---
+
+## D-103: Model Catalog Strategy
+
+**Decision**: Pre-populate common models in each provider's TOML with metadata. Graceful defaults for unknown models.
+
+**Alternatives considered**:
+- Minimal TOML (just provider config, no models)
+- Exhaustive catalog (all available models)
+
+**Rationale**: Popular models get correct context_window, max_output_tokens, supports_tools flags. Missing models still work — adapter doesn't enforce metadata presence. Balance between useful defaults and maintenance burden.
+
+---
+
+## D-104: Local Provider Costs
+
+**Decision**: Zero cost defaults (cost_*_per_1m = 0.0) for local providers, configurable override.
+
+**Alternatives considered**:
+- No cost fields at all for local
+- Estimate GPU costs per model
+
+**Rationale**: Local inference has no API billing. Telemetry still logs tokens. Organizations can override costs in TOML for internal GPU cost tracking.
+
+---
+
+## D-105: Mistral Quirk Overrides
+
+**Decision**: MistralAdapter overrides _build_request_body (tool_choice "required" → "any") and _map_stop_reason (adding "model_length" mapping).
+
+**Alternatives considered**:
+- Pure alias (ignore quirks, let Mistral API error)
+- Config-driven quirk map in TOML
+
+**Rationale**: Only provider with known API divergences from OpenAI standard. Targeted method overrides keep the adapter simple (~40 lines) while handling real-world differences.
+
+---
+
+## D-106: HuggingFace Provider Naming
+
+**Decision**: Two separate providers: `huggingface` (cloud Inference API) + `huggingface_tgi` (self-hosted TGI).
+
+**Alternatives considered**:
+- Single `huggingface` with mode toggle
+- `hf` and `hf_tgi` (shorter names)
+
+**Rationale**: Different auth requirements (HF_TOKEN required vs optional), different base URLs, different model naming conventions. Separate providers is cleaner than mode toggling. Full names match the services they represent.
+
+---

@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from arcllm.adapters.base import BaseAdapter
+from arcllm.config import ProviderConfig
 from arcllm.exceptions import ArcLLMAPIError
 from arcllm.types import (
     ImageBlock,
@@ -30,6 +31,13 @@ _STOP_REASON_MAP: dict[str, StopReason] = {
 class OpenaiAdapter(BaseAdapter):
     """Translates ArcLLM types to/from the OpenAI Chat Completions API."""
 
+    def __init__(self, config: ProviderConfig, model_name: str) -> None:
+        super().__init__(config, model_name)
+        # Cache headers — api_key is immutable after init.
+        self._headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self._api_key:
+            self._headers["Authorization"] = f"Bearer {self._api_key}"
+
     @property
     def name(self) -> str:
         return "openai"
@@ -37,10 +45,7 @@ class OpenaiAdapter(BaseAdapter):
     # -- Request building -----------------------------------------------------
 
     def _build_headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
+        return self._headers
 
     def _format_tool(self, tool: Tool) -> dict[str, Any]:
         return {

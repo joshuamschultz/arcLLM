@@ -27,7 +27,7 @@ class BaseAdapter(LLMProvider):
 
         env_var = config.provider.api_key_env
         api_key = os.environ.get(env_var, "")
-        if not api_key:
+        if config.provider.api_key_required and not api_key:
             raise ArcLLMConfigError(
                 f"Missing environment variable '{env_var}' for provider. "
                 "Set it to your API key."
@@ -86,6 +86,8 @@ class BaseAdapter(LLMProvider):
             return None
 
     def validate_config(self) -> bool:
+        if not self._config.provider.api_key_required:
+            return True
         return bool(self._api_key)
 
     async def close(self) -> None:

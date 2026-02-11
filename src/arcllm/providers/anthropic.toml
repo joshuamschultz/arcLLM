@@ -2,6 +2,7 @@
 api_format = "anthropic-messages"
 base_url = "https://api.anthropic.com"
 api_key_env = "ANTHROPIC_API_KEY"
+api_key_required = true
 default_model = "claude-sonnet-4-20250514"
 default_temperature = 0.7
 vault_path = ""
