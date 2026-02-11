@@ -3,6 +3,12 @@ provider = "anthropic"
 temperature = 0.7
 max_tokens = 4096
 
+[vault]
+backend = ""
+cache_ttl_seconds = 300
+url = ""
+region = ""
+
 [modules.routing]
 enabled = false
 
@@ -47,5 +53,14 @@ timeout_ms = 10000
 max_batch_size = 512
 max_queue_size = 2048
 schedule_delay_ms = 5000
+
+[modules.security]
+enabled = false
+pii_enabled = true
+pii_detector = "regex"
+pii_custom_patterns = []
+signing_enabled = true
+signing_algorithm = "hmac-sha256"
+signing_key_env = "ARCLLM_SIGNING_KEY"
 
 [modules.otel.resource_attributes]

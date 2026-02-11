@@ -113,6 +113,7 @@ class LLMResponse(BaseModel):
     stop_reason: StopReason
     thinking: str | None = None
     raw: Any = Field(default=None, repr=False, exclude=True)
+    metadata: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ from arcllm.config import (
     ModuleConfig,
     ProviderConfig,
     ProviderSettings,
+    VaultConfig,
     load_global_config,
     load_provider_config,
 )
@@ -47,7 +48,9 @@ _LAZY_IMPORTS: dict[str, str] = {
     "RateLimitModule": "arcllm.modules.rate_limit",
     "RetryModule": "arcllm.modules.retry",
     "OtelModule": "arcllm.modules.otel",
+    "SecurityModule": "arcllm.modules.security",
     "TelemetryModule": "arcllm.modules.telemetry",
+    "VaultResolver": "arcllm.vault",
 }
 
 
@@ -72,7 +75,9 @@ __all__ = [
     "OtelModule",
     "RateLimitModule",
     "RetryModule",
+    "SecurityModule",
     "TelemetryModule",
+    "VaultResolver",
     # Config types
     "DefaultsConfig",
     "GlobalConfig",
@@ -80,6 +85,7 @@ __all__ = [
     "ModuleConfig",
     "ProviderConfig",
     "ProviderSettings",
+    "VaultConfig",
     # Config loaders
     "load_global_config",
     "load_provider_config",

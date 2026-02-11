@@ -4,6 +4,7 @@ base_url = "https://api.openai.com"
 api_key_env = "OPENAI_API_KEY"
 default_model = "gpt-4o"
 default_temperature = 0.7
+vault_path = ""
 
 [models.gpt-4o]
 context_window = 128000

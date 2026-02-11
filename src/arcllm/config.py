@@ -40,6 +40,7 @@ class ProviderSettings(BaseModel):
     api_key_env: str
     default_model: str
     default_temperature: float
+    vault_path: str = ""
 
     @field_validator("base_url")
     @classmethod
@@ -78,11 +79,21 @@ class ModuleConfig(BaseModel):
     enabled: bool = False
 
 
+class VaultConfig(BaseModel):
+    """Vault backend configuration from [vault] section."""
+
+    backend: str = ""
+    cache_ttl_seconds: int = 300
+    url: str = ""
+    region: str = ""
+
+
 class GlobalConfig(BaseModel):
     """Loaded global config.toml — defaults + module toggles."""
 
     defaults: DefaultsConfig
     modules: dict[str, ModuleConfig]
+    vault: VaultConfig = VaultConfig()
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +166,8 @@ def load_global_config() -> GlobalConfig:
             name: ModuleConfig(**settings)
             for name, settings in data.get("modules", {}).items()
         }
-        return GlobalConfig(defaults=defaults, modules=modules)
+        vault = VaultConfig(**data.get("vault", {}))
+        return GlobalConfig(defaults=defaults, modules=modules, vault=vault)
     except ValidationError as e:
         raise ArcLLMConfigError(f"Invalid global config: {e}")
 

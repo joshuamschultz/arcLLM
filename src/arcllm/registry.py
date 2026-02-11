@@ -1,6 +1,7 @@
 """Provider registry — convention-based adapter discovery and load_model()."""
 
 import importlib
+import os
 from typing import Any
 
 from arcllm.config import ProviderConfig, load_global_config, load_provider_config
@@ -16,15 +17,17 @@ _provider_config_cache: dict[str, ProviderConfig] = {}
 _adapter_class_cache: dict[str, type[LLMProvider]] = {}
 _global_config_cache: dict[str, Any] | None = None
 _module_settings_cache: dict[str, dict[str, Any]] = {}
+_vault_resolver_cache: Any | None = None
 
 
 def clear_cache() -> None:
     """Reset all registry caches. Use in tests for isolation."""
-    global _global_config_cache
+    global _global_config_cache, _vault_resolver_cache
     _provider_config_cache.clear()
     _adapter_class_cache.clear()
     _global_config_cache = None
     _module_settings_cache.clear()
+    _vault_resolver_cache = None
     from arcllm.modules.rate_limit import clear_buckets
 
     clear_buckets()
@@ -113,6 +116,7 @@ def load_model(
     rate_limit: bool | dict[str, Any] | None = None,
     telemetry: bool | dict[str, Any] | None = None,
     audit: bool | dict[str, Any] | None = None,
+    security: bool | dict[str, Any] | None = None,
     otel: bool | dict[str, Any] | None = None,
 ) -> LLMProvider:
     """Load a configured model object for the given provider.
@@ -133,7 +137,7 @@ def load_model(
         - ``dict``: enable with custom settings (merged over defaults)
         - ``None`` (default): use config.toml enabled flag
 
-    Stacking order (outermost first): Otel → Telemetry → Audit → Retry → Fallback → RateLimit → Adapter.
+    Stacking order (outermost first): Otel → Telemetry → Audit → Security → Retry → Fallback → RateLimit → Adapter.
 
     Args:
         provider: Provider name (e.g., "anthropic", "openai").
@@ -145,6 +149,7 @@ def load_model(
         telemetry: TelemetryModule configuration override. Pricing data is
             automatically injected from provider model metadata.
         audit: AuditModule configuration override. PII-safe metadata logging.
+        security: SecurityModule configuration override. PII redaction + request signing.
         otel: OtelModule configuration override. OpenTelemetry distributed tracing.
 
     Returns:
@@ -160,6 +165,32 @@ def load_model(
 
     # Resolve model name
     model_name = model or config.provider.default_model
+
+    # Resolve API key via vault if configured
+    global _global_config_cache
+    if _global_config_cache is None:
+        _global_config_cache = load_global_config()
+        for name, cfg in _global_config_cache.modules.items():
+            _module_settings_cache[name] = {
+                k: v for k, v in cfg.model_dump().items() if k != "enabled"
+            }
+
+    global _vault_resolver_cache
+    vault_cfg = _global_config_cache.vault
+    if vault_cfg.backend:
+        from arcllm.vault import VaultResolver
+
+        if _vault_resolver_cache is None:
+            _vault_resolver_cache = VaultResolver.from_config(
+                vault_cfg.backend, vault_cfg.cache_ttl_seconds
+            )
+        vault_path = config.provider.vault_path
+        api_key_env = config.provider.api_key_env
+        resolved_key = _vault_resolver_cache.resolve_api_key(
+            api_key_env, vault_path or None
+        )
+        # Set env var so adapter picks it up transparently
+        os.environ[api_key_env] = resolved_key
 
     # Look up adapter class by convention (cached after first lookup)
     adapter_class = _get_adapter_class(provider)
@@ -185,6 +216,12 @@ def load_model(
         from arcllm.modules.retry import RetryModule
 
         result = RetryModule(retry_config, result)
+
+    security_config = _resolve_module_config("security", security)
+    if security_config is not None:
+        from arcllm.modules.security import SecurityModule
+
+        result = SecurityModule(security_config, result)
 
     audit_config = _resolve_module_config("audit", audit)
     if audit_config is not None:

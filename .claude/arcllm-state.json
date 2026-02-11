@@ -1,7 +1,7 @@
 {
-  "current_step": 13,
+  "current_step": 14,
   "current_task": null,
-  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13],
+  "completed_steps": [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 14],
   "skipped_steps": [9, 12],
   "step_plans": {
     "1": {
@@ -238,6 +238,38 @@
         "T13.8 Update registry.py with otel= kwarg",
         "T13.9 Update __init__.py and modules/__init__.py exports",
         "T13.10 Full test suite verification"
+      ]
+    },
+    "14": {
+      "status": "complete",
+      "spec_id": "012",
+      "tasks": [
+        "T14.1 Add VaultConfig and SecurityModuleConfig to config.py",
+        "T14.2 Update config.toml and provider TOMLs",
+        "T14.3 Add arcllm[signing] extras to pyproject.toml",
+        "T14.4 Write test_pii.py (TDD RED)",
+        "T14.5 Implement _pii.py (TDD GREEN)",
+        "T14.6 Write test_signing.py (TDD RED)",
+        "T14.7 Implement _signing.py (TDD GREEN)",
+        "T14.8 Write test_vault.py (TDD RED)",
+        "T14.9 Implement vault.py (TDD GREEN)",
+        "T14.10 Write test_security.py (TDD RED)",
+        "T14.11 Implement SecurityModule in modules/security.py (TDD GREEN)",
+        "T14.12 Update registry.py, __init__.py, modules/__init__.py"
+      ],
+      "completed_tasks": [
+        "T14.1 Add VaultConfig and SecurityModuleConfig to config.py",
+        "T14.2 Update config.toml and provider TOMLs",
+        "T14.3 Add arcllm[signing] extras to pyproject.toml",
+        "T14.4 Write test_pii.py (TDD RED)",
+        "T14.5 Implement _pii.py (TDD GREEN)",
+        "T14.6 Write test_signing.py (TDD RED)",
+        "T14.7 Implement _signing.py (TDD GREEN)",
+        "T14.8 Write test_vault.py (TDD RED)",
+        "T14.9 Implement vault.py (TDD GREEN)",
+        "T14.10 Write test_security.py (TDD RED)",
+        "T14.11 Implement SecurityModule in modules/security.py (TDD GREEN)",
+        "T14.12 Update registry.py, __init__.py, modules/__init__.py"
       ]
     }
   },
@@ -577,6 +609,72 @@
       "reason": "mTLS for federal/zero-trust. Auth headers for cloud collectors. Batch tuning for 10K agents. Resource attributes for deployment metadata.",
       "date": "2026-02-09",
       "alternatives_considered": ["minimal config", "basic without TLS"]
+    },
+    "D-089_security_module_structure": {
+      "decision": "Two modules: VaultResolver (construction-time key resolution) + SecurityModule (per-invoke PII + signing)",
+      "reason": "Vault is a one-time setup concern (resolve key before adapter construction). PII+signing are per-request concerns. Different lifecycles = different modules.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["single SecurityModule for all three", "three separate modules"]
+    },
+    "D-090_vault_abstraction": {
+      "decision": "Protocol + extras pattern — VaultBackend protocol, backends loaded via importlib from config string, pip install arcllm[aws] for AWS support",
+      "reason": "User wanted simplicity: set backend in config, install extra, it just works. No unused backends loaded.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["built-in backends", "env-var-only (no vault)"]
+    },
+    "D-091_vault_fallback": {
+      "decision": "Vault first, env var fallback — try vault, fall back to os.environ if vault unavailable",
+      "reason": "Vault is authoritative when configured, but env var provides graceful degradation for dev/test environments.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["vault only (no fallback)", "env var first, vault override"]
+    },
+    "D-092_key_caching": {
+      "decision": "TTL-based cache with time.monotonic(), default 300 seconds",
+      "reason": "Avoids hammering vault on every load_model() call. time.monotonic() immune to clock skew. 5min default balances freshness vs performance.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["no caching", "indefinite cache with manual invalidation", "LRU cache"]
+    },
+    "D-093_pii_detection": {
+      "decision": "Regex-based with pluggable PiiDetector protocol — built-in patterns + custom regex + extensible to presidio/spacy via protocol",
+      "reason": "User wanted: default regex works out of box, easy to add custom patterns, extensible to presidio or spacy models via PiiDetector protocol. No unused deps loaded.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["regex only (no extensibility)", "presidio default", "NER-based"]
+    },
+    "D-094_pii_redaction_format": {
+      "decision": "Type-tagged placeholders: [PII:SSN], [PII:EMAIL], [PII:PHONE] etc.",
+      "reason": "Preserves information about what was redacted for audit/debugging without exposing actual PII. Agents can still reason about content structure.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["generic [REDACTED]", "Unicode replacement character", "empty string"]
+    },
+    "D-095_signing_algorithm": {
+      "decision": "Both: HMAC-SHA256 default (stdlib) + ECDSA P-256 optional (arcllm[signing] extra)",
+      "reason": "HMAC covers 90% of cases with zero deps. ECDSA P-256 for NIST FIPS 186-5 compliance in federal environments. Optional extra keeps base install light.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["HMAC only", "ECDSA only", "Ed25519"]
+    },
+    "D-096_signature_scope": {
+      "decision": "Sign messages + tools + model name via canonical JSON serialization",
+      "reason": "Covers the full request intent. sort_keys=True + compact separators ensures deterministic canonical form.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["messages only", "full request body", "messages + model only"]
+    },
+    "D-097_security_phases": {
+      "decision": "Single SecurityModule with two phases: PII redaction (pre/post) + signing (post)",
+      "reason": "Same module, clear phase ordering. PII redact outbound → call inner → PII redact inbound → sign. Audit sees redacted data (correct stacking order).",
+      "date": "2026-02-11",
+      "alternatives_considered": ["separate PiiModule + SigningModule", "combined with vault"]
+    },
+    "D-098_vault_config_layout": {
+      "decision": "Global [vault] section in config.toml + per-provider vault_path in provider TOMLs",
+      "reason": "Vault backend is global (one vault for entire system). vault_path is per-provider (different secrets for different API keys).",
+      "date": "2026-02-11",
+      "alternatives_considered": ["all in provider TOML", "all in global config", "environment variables only"]
+    },
+    "D-099_vault_env_var_handoff": {
+      "decision": "VaultResolver sets os.environ[api_key_env] before adapter construction",
+      "reason": "Zero adapter changes needed. Adapter reads API key from env var in __init__ as always. Vault resolution is transparent to the adapter layer.",
+      "date": "2026-02-11",
+      "alternatives_considered": ["pass resolved key to adapter constructor", "adapter calls vault directly"]
     }
   },
   "notes": [
@@ -634,10 +732,20 @@
     "Config-driven SDK setup: exporter (otlp/console/none), endpoint, protocol (grpc/http), sample_rate, headers, TLS/mTLS, batch tuning",
     "opentelemetry-api as core dep, SDK+OTLP as [otel] extras",
     "Stacking order: Otel(Telemetry(Audit(Retry(Fallback(RateLimit(adapter))))))",
-    "Next: Step 14 — Security layer (vault, signing, PII redaction)"
+    "Next: Step 14 — Security layer (vault, signing, PII redaction)",
+    "Step 14 complete — 12/12 tasks, 72 new tests (26 PII + 13 signing + 14 vault + 19 security), 451 total passing, 1 skipped",
+    "Security layer: VaultResolver (construction-time key resolution) + SecurityModule (per-invoke PII redaction + request signing)",
+    "_pii.py: PiiDetector protocol, RegexPiiDetector with 5 built-in patterns (SSN, CC, email, phone, IPv4), custom pattern support, redact_text() with type-tagged placeholders",
+    "_signing.py: HMAC-SHA256 default (stdlib), ECDSA P-256 stub (arcllm[signing] extra), canonical_payload() with sort_keys=True",
+    "vault.py: VaultBackend protocol, VaultResolver with TTL cache (time.monotonic()), vault-first + env-var-fallback, backend loaded via importlib",
+    "SecurityModule: 4 phases (PII redact outbound → call inner → PII redact inbound → sign), OTel spans per phase",
+    "Stacking order: Otel → Telemetry → Audit → Security → Retry → Fallback → RateLimit → Adapter",
+    "Coverage: _pii 100%, _signing 97%, vault 92%, security 89%",
+    "Decisions D-089 through D-099 recorded",
+    "Next: Step 15 — Local providers (Ollama, vLLM)"
   ],
   "meta": {
-    "last_updated": "2026-02-09",
+    "last_updated": "2026-02-11",
     "created": "2026-02-07"
   }
 }
