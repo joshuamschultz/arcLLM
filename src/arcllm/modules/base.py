@@ -43,7 +43,7 @@ class BaseModule(LLMProvider):
                 yield span
             except Exception as exc:
                 span.record_exception(exc)
-                span.set_status(StatusCode.ERROR)
+                span.set_status(StatusCode.ERROR, str(exc))
                 raise
 
     @property

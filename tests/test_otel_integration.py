@@ -152,7 +152,9 @@ class TestRetrySpans:
             with pytest.raises(ArcLLMAPIError):
                 await module.invoke(messages)
         retry_span = next(s for s in spans if s._name == "arcllm.retry")
-        retry_span.set_status.assert_called_with(StatusCode.ERROR)
+        # set_status now includes error description from _span()
+        call_args = retry_span.set_status.call_args
+        assert call_args[0][0] == StatusCode.ERROR
 
 
 class TestFallbackSpans:

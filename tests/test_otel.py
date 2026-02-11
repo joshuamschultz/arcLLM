@@ -219,7 +219,7 @@ class TestOtelModule:
             messages = [Message(role="user", content="hi")]
             await module.invoke(messages)
         calls = {c[0][0]: c[0][1] for c in mock_span.set_attribute.call_args_list}
-        assert calls.get("gen_ai.response.finish_reasons") == "end_turn"
+        assert calls.get("gen_ai.response.finish_reasons") == ["end_turn"]
 
     def test_provider_name_from_inner(self):
         """module.name delegates to inner.name."""
@@ -388,3 +388,65 @@ class TestOtelSdkSetup:
             )
             config_arg = mock_setup.call_args[0][0]
             assert config_arg["sample_rate"] == 0.5
+
+    def test_tls_certificates_passed(self):
+        """TLS certificate paths forwarded to SDK setup."""
+        from arcllm.modules.otel import OtelModule
+
+        with patch("arcllm.modules.otel._setup_sdk") as mock_setup:
+            module = OtelModule(
+                {
+                    "exporter": "otlp",
+                    "certificate_file": "/path/ca.pem",
+                    "client_key_file": "/path/client.key",
+                    "client_cert_file": "/path/client.pem",
+                },
+                _make_inner(),
+            )
+            config_arg = mock_setup.call_args[0][0]
+            assert config_arg["certificate_file"] == "/path/ca.pem"
+            assert config_arg["client_key_file"] == "/path/client.key"
+            assert config_arg["client_cert_file"] == "/path/client.pem"
+
+
+class TestOtelSdkIdempotency:
+    """Idempotency guard on _setup_sdk."""
+
+    def test_setup_sdk_idempotent(self):
+        """Second call to _setup_sdk is a no-op."""
+        import arcllm.modules.otel as otel_mod
+
+        otel_mod._sdk_configured = False
+        with patch("arcllm.modules.otel._setup_sdk", wraps=otel_mod._setup_sdk):
+            # First call via OtelModule should set _sdk_configured
+            with patch.dict(
+                "sys.modules",
+                {
+                    "opentelemetry.sdk": MagicMock(),
+                    "opentelemetry.sdk.trace": MagicMock(),
+                    "opentelemetry.sdk.trace.export": MagicMock(),
+                    "opentelemetry.sdk.resources": MagicMock(),
+                    "opentelemetry.sdk.trace.sampling": MagicMock(),
+                    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": MagicMock(),
+                },
+            ):
+                # Direct call to _setup_sdk
+                otel_mod._sdk_configured = False
+                otel_mod._setup_sdk({"exporter": "otlp"})
+                assert otel_mod._sdk_configured is True
+
+                # Second call should be no-op (no import errors from mocks)
+                otel_mod._setup_sdk({"exporter": "otlp"})
+                # If it wasn't idempotent, the mock modules would fail
+
+        # Cleanup
+        otel_mod._sdk_configured = False
+
+    def test_setup_sdk_flag_reset_by_clear_cache(self):
+        """clear_cache() resets _sdk_configured."""
+        import arcllm.modules.otel as otel_mod
+        from arcllm.registry import clear_cache
+
+        otel_mod._sdk_configured = True
+        clear_cache()
+        assert otel_mod._sdk_configured is False

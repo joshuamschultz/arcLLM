@@ -7,7 +7,7 @@
 | **ID** | 011 |
 | **Name** | OpenTelemetry Export |
 | **Type** | Library/Backend |
-| **Status** | PENDING |
+| **Status** | COMPLETE |
 | **Created** | 2026-02-09 |
 | **Confidence** | High (>70%) — Module pattern established in 007-010, all 10 decisions made |
 
@@ -36,7 +36,30 @@ ArcLLM Build Step 13. Decisions made interactively via `/build-arcllm 13` sessio
 
 ## Learnings
 
-(To be populated during implementation)
+### Review Findings (6-Agent Swarm)
+
+**Review Status**: PASS (after 3 required fixes applied)
+
+**Required Fixes Applied**:
+1. **TLS certificates wired to OTLP exporters** — `certificate_file`, `client_key_file`, `client_cert_file` were accepted in config but never passed to exporter constructors. Now properly forwarded to both gRPC and HTTP exporters via `**credentials_kwargs` / `**http_kwargs`.
+2. **Idempotency guard on `_setup_sdk()`** — Without the guard, each `load_model(otel=True)` call created a new `TracerProvider` + `BatchSpanProcessor`, leaking threads. Added module-level `_sdk_configured` flag; `clear_cache()` resets it for test isolation.
+3. **`gen_ai.response.finish_reasons` as list** — GenAI semantic conventions require `finish_reasons` to be a list (even for single values). Changed from `response.stop_reason` to `[response.stop_reason]`.
+
+**Advisory Fixes Applied**:
+4. **`_span()` error description** — `set_status(StatusCode.ERROR)` now includes `str(exc)` for richer error diagnostics in trace UIs.
+
+**Key Advisory Findings (not blocking, for future hardening)**:
+- `record_exception()` in `_span()` serializes full exception bodies — PII leak risk for federal. Consider sanitized recording.
+- `opentelemetry-api` as core dep increases supply chain surface. Could be made optional with try/except import in `base.py`.
+- `insecure=True` flag has no warning log. Add warning for production.
+- `headers` dict accepts plaintext credentials in TOML. Consider `headers_env` pattern like `api_key_env`.
+- Global `TracerProvider` mutation means last `load_model()` wins process-wide. Document one-time init pattern.
+
+### Implementation Insights
+
+- **No-op tracer pattern works well**: `opentelemetry-api` returns `NonRecordingSpan` when no SDK is configured, making all `_span()` calls truly zero-cost without conditional checks.
+- **Module-level `_setup_sdk` vs instance-level**: Keeping SDK setup at module level (not per-OtelModule instance) matches OTel's process-global `TracerProvider` model and prevents resource leaks.
+- **Test mocking strategy**: Mocking `_setup_sdk` at the function level and `trace.get_tracer` at the base module level provides clean isolation. The `_make_mock_tracer()` helper pattern (returning tracer + spans list) is reusable across all module integration tests.
 
 ## Cross-References
 

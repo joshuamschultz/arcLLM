@@ -105,7 +105,7 @@ class TestBaseModuleSpan:
             with pytest.raises(ValueError):
                 with module._span("test.span"):
                     raise ValueError("boom")
-        mock_span.set_status.assert_called_once_with(StatusCode.ERROR)
+        mock_span.set_status.assert_called_once_with(StatusCode.ERROR, "boom")
 
     def test_span_reraises_exception(self):
         """Exception propagates to caller — _span() is transparent."""
