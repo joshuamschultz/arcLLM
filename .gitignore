@@ -26,10 +26,11 @@ build/
 # pytest
 .pytest_cache/
 
-# Claude 
-.claude/commands/*
-.claude/skills/*
+# Claude
+.claude/*
+!.claude/specs/
 CLAUDE.md
+docs/arcllm-prd.md
 
 # Work files
 architecture/
